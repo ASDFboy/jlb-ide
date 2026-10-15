@@ -1011,6 +1011,53 @@ test('renames a name everywhere it means the same thing', async () => {
   await page.evaluate(() => window.jlbIde.workspace.saveAll());
 });
 
+test('folds blocks, tables and comments, and colors brackets by depth', async () => {
+  await page.evaluate(() => window.jlbIde.workspace.newFile(''));
+  await setText('>>>\nA note\nabout it\n<<<\nmonsters = [\n    [name: "slime"],\n]\nFUNC attack(m) {\n    m.hp -= 1\n    IF m.hp <== 0 {\n        PRINT("(")\n    }\n}\nPRINT(LEN(monsters)))\n');
+  await page.waitForSelector('.cm-foldGutter .fold-marker.open', { state: 'attached' });
+  const markers = () => page.$$eval('.cm-foldGutter .fold-marker.open', (e) => e.length);
+  assert.equal(await markers(), 4); // the comment, the table, the function and the IF
+  // Clicking the arrow on the FUNC line folds it, and the placeholder says how much.
+  const at = await page.evaluate(() => {
+    const v = window.jlbIde.editor.view;
+    const c = v.coordsAtPos(v.state.doc.line(8).from);
+    const g = document.querySelector('.cm-foldGutter').getBoundingClientRect();
+    return { x: g.left + g.width / 2, y: (c.top + c.bottom) / 2 };
+  });
+  await page.mouse.click(at.x, at.y);
+  assert.equal(await page.locator('.fold-placeholder').innerText(), '⋯ 4 lines');
+  await page.click('.fold-placeholder');
+  assert.equal(await page.locator('.fold-placeholder').count(), 0);
+  // From the keyboard: the block around the cursor, then everything.
+  await cursorOn(9, 'hp');
+  await page.keyboard.press('Control+Shift+BracketLeft');
+  assert.equal(await page.locator('.fold-placeholder').innerText(), '⋯ 4 lines');
+  await page.keyboard.press('Control+Shift+BracketRight');
+  assert.equal(await page.locator('.fold-placeholder').count(), 0);
+  await page.keyboard.press('Control+Alt+BracketLeft');
+  assert.equal(await page.locator('.fold-placeholder').count(), 3);
+  await page.keyboard.press('Control+Alt+BracketRight');
+  assert.equal(await page.locator('.fold-placeholder').count(), 0);
+
+  // Bracket colors: by depth, not in text, and red for one that closes nothing.
+  const colors = () => page.evaluate(() => {
+    const line = [...document.querySelectorAll('.cm-line')][10];
+    return [...line.querySelectorAll('[class*="cm-br"]')].map((e) => `${e.textContent}${e.className.match(/cm-br(\d|-bad)/)[1]}`).join(' ');
+  });
+  assert.equal(await colors(), '(2 )2'); // PRINT("(") inside FUNC and IF: depth 2, the ( in text isn't colored
+  assert.equal(await page.locator('.cm-br-bad').count(), 1);
+  assert.equal(await page.locator('.cm-br-bad').innerText(), ')');
+  await page.evaluate(() => window.jlbIde.settings.set('folding.bracketColors', false));
+  await page.waitForFunction(() => !document.querySelector('.cm-br0'));
+  await page.evaluate(() => window.jlbIde.settings.set('folding.fold', false));
+  await page.waitForFunction(() => !document.querySelector('.cm-foldGutter'));
+  await page.evaluate(() => {
+    window.jlbIde.settings.set('folding.bracketColors', true);
+    window.jlbIde.settings.set('folding.fold', true);
+  });
+  await page.waitForSelector('.cm-foldGutter');
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

@@ -12,6 +12,7 @@ export class Workspace {
     this.docs = [];
     this.active = null;
     this.folder = null;
+    this.saveFilters = []; // (text, file) => text, run on a file's text before it's saved
     const s = ide.settings;
     s.define({ key: 'workspace.restore', title: 'Reopen the last folder and files on start', type: 'boolean', default: true, section: 'Files' });
     s.define({ key: 'workspace.autoSave', title: 'Save automatically', description: 'Saves a file a moment after you stop typing (only files that already have a name).', type: 'boolean', default: false, section: 'Files' });
@@ -210,14 +211,27 @@ export class Workspace {
   async save(doc = this.current(), { quiet = false } = {}) {
     if (!doc) return false;
     if (!doc.path) return this.saveAs(doc);
-    let text = this.textOf(doc);
+    const before = this.textOf(doc);
+    let text = before;
+    // Plugins can tidy the text first (like the formatter); one failing doesn't stop the save.
+    for (const f of this.saveFilters) {
+      try {
+        const out = f(text, doc);
+        if (typeof out === 'string') text = out;
+      } catch (e) {
+        console.error('[jlb-ide] a save step failed:', e);
+      }
+    }
     if (this.ide.settings.get('workspace.trimTrailing')) text = text.replace(/[ \t]+$/gm, '');
     if (this.ide.settings.get('workspace.finalNewline') && text && !text.endsWith('\n')) text += '\n';
-    if (text !== this.textOf(doc) && doc === this.active) {
-      // Show what was saved, keeping the cursor where it was as far as possible.
-      const v = this.ide.editor.view;
-      const head = Math.min(v.state.selection.main.head, text.length);
-      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: text }, selection: { anchor: head } });
+    if (text !== before) {
+      // The tab shows what was saved: just the part that changed, so the cursor,
+      // folds and undo history stay put.
+      let a = 0;
+      while (a < before.length && a < text.length && before[a] === text[a]) a++;
+      let b = 0;
+      while (b < before.length - a && b < text.length - a && before[before.length - 1 - b] === text[text.length - 1 - b]) b++;
+      this.edit(doc, { from: a, to: before.length - b, insert: text.slice(a, text.length - b) }, { userEvent: 'input.format' });
     }
     try {
       await invoke('write_text', { path: doc.path, text: doc.crlf ? text.replace(/\n/g, '\r\n') : text });

@@ -138,6 +138,7 @@ A plain key like `"showInStatusBar"` is your plugin's own: it's stored as `word-
 | `isDirty(file)` | `true` when the file has unsaved changes. |
 | `setText(file, text)` | Replaces a file's text as an edit (it can be undone, and shows as unsaved). |
 | `edit(file, changes)` | Changes part of a file's text: `{ from, to, insert }` or a list of them, by offsets in its current text. One edit that can be undone. |
+| `addSaveStep(fn)` | `fn(text, file)` runs when a file is saved and gives back the text to save instead (or nothing to keep it). The tab shows the result. |
 | `activate(file)` | Switches to an open file's tab. |
 | `restored` | `true` once the files from last time have been reopened. |
 

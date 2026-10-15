@@ -20,6 +20,9 @@ export function keyOf(e) {
   // Shift changes the character on some keys; use the physical key for those.
   if (e.shiftKey && e.code?.startsWith('Digit')) k = e.code.slice(5);
   if (e.code === 'Backquote') k = '`';
+  // Shift+[ types {, but the shortcut is still Shift+[.
+  if (e.code === 'BracketLeft') k = '[';
+  if (e.code === 'BracketRight') k = ']';
   parts.push(k);
   return parts.join('+');
 }

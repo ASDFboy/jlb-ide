@@ -225,6 +225,13 @@ export class Plugins {
         setText: (doc, text) => ide.workspace.setText(doc, text),
         /** Changes part of a tab's text: { from, to, insert } or a list of them. Undoable, shows as unsaved. */
         edit: (doc, changes) => ide.workspace.edit(doc, changes),
+        /** fn(text, file) gives back the text to save instead (like formatted code). */
+        addSaveStep: (fn) => {
+          ide.workspace.saveFilters.push(fn);
+          return track(() => {
+            ide.workspace.saveFilters = ide.workspace.saveFilters.filter((f) => f !== fn);
+          });
+        },
         activate: (doc) => ide.workspace.activate(doc),
         /** True once the files from last time have been reopened (see the workspace-restored event). */
         get restored() { return !!ide.workspace.restored; },
