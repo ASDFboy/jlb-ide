@@ -20,11 +20,14 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
   - A variable or function used above the line that gives it a value (top-level code runs in order).
   - A `GOTO` with no matching `POINT`.
 - **Step-by-step debugger.** Click left of a line number to set a breakpoint, then Run: the program stops there. Step through it line by line (into and out of functions), and see every variable in the Debug view, with tables opening up to show what's inside and the values that just changed standing out. Rest the mouse on a name to see its value, and watch expressions like `hero.hp * 2`. Pause stops a loop that never ends, and an error stops the program before it ends, so you can see why.
+- **Table viewer.** Open any table as a grid, from the Debug view, a crash report or Quick-try. A list of tables (like a list of players) gets a column for each name, and you can sort by a column, filter, open the tables inside, and copy it all for a spreadsheet.
 - **Crash report viewer.** When a program crashes, a panel shows the error, the function calls and every variable's value in a table. The crashing line is marked in your code, and resting the mouse on a variable shows what it held when the program crashed.
 - **Quirk explainer.** Rest the mouse on any operator, command or keyword for a plain-English explanation: how `&` differs from `&&`, what `!%` and `!^` do, why `!=` is an error, what `0xFF` equals. Your own functions show their inputs, and which ones are shared with `@`.
 - **Quick-try console.** Type a bit of .jlb and see the result and its type right away: `"25" * 2` gives `"2525"` (TEXT). Variables carry over between snippets, `INPUT` asks right in the panel, and a snippet stuck in a loop can be stopped. Select code in the editor and press Ctrl+Enter to try it, or load the whole file to try out its functions.
 - **Run with Rust or C.** Switch interpreters with one click in the toolbar. Programs that use `INPUT` work: type your answer in the Output panel.
 - **The language guide, built in.** The whole .jlb reference in the sidebar, searchable, with a button to open any example as a new file.
+
+![Stopped at a breakpoint, with the variables in the Debug view and a table open in the table viewer](docs/images/debugger.png)
 
 ![Warnings for .jlb slip-ups, with a one-click fix](docs/images/checks.png)
 

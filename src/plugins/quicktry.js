@@ -96,7 +96,9 @@ export default {
           entry.classList.add('err');
           res.textContent = reply.error.message + (reply.error.traced && reply.error.line > 1 ? ` (line ${reply.error.line})` : '');
         } else if ('value' in reply) {
-          clear(res).append(h('code.qt-value', reply.value), api.settings.get('showTypes') ? h('span.qt-type', reply.type) : null);
+          const tv = reply.type === 'TABLE' ? api.use('tableview') : null;
+          clear(res).append(h('code.qt-value', reply.value), api.settings.get('showTypes') ? h('span.qt-type', reply.type) : null,
+            tv ? h('button.link.qt-view', { title: 'Open in the table viewer', on: { click: () => tv.open({ title: label || code.split('\n')[0].slice(0, 40), node: tv.parse(reply.value, 'value') }) } }, icon('table', 12), 'View as a table') : null);
         } else if (reply.ended) {
           res.textContent = 'END stopped the session; variables were cleared.';
           api.invoke('repl_reset');

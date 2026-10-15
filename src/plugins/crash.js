@@ -107,6 +107,17 @@ export default {
       return cell;
     };
 
+    // A table's value opens in the table viewer, when it's switched on.
+    const viewButton = (v) => {
+      const tv = api.use('tableview');
+      if (!tv) return null;
+      return h('button.icon-btn.view-table', {
+        title: 'Open in the table viewer',
+        'aria-label': `Open ${v.name} in the table viewer`,
+        on: { click: () => tv.open({ title: v.name, node: tv.parse(v.value, v.name) }) },
+      }, icon('table', 13));
+    };
+
     // ---------- the panel ----------
     let filter = '';
     const render = () => {
@@ -130,7 +141,7 @@ export default {
             rows.length
               ? h('table.var-table',
                 h('thead', h('tr', h('th', 'Name'), h('th', 'Value'), h('th', 'Type'))),
-                h('tbody', rows.map((v) => h('tr', h('td.var-name', v.name), h('td.var-value', value(v.value)), h('td.var-type', v.type)))))
+                h('tbody', rows.map((v) => h('tr', h('td.var-name', v.name), h('td.var-value', value(v.value)), h('td.var-type', v.type, v.type === 'TABLE' ? viewButton(v) : null)))))
               : h('p.view-note', q ? 'No matches' : 'No variables')));
         }
       };

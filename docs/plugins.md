@@ -206,6 +206,16 @@ A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` c
 | `crash` | `{ report, doc }`; `report` is the [JSON crash report](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes) |
 | `settings-change` | `key, value` |
 
+### Features other plugins can use
+
+Some built-in features share an API through `api.use(name)`, which gives back `undefined` when that feature is switched off:
+
+| Name | What it offers |
+| --- | --- |
+| `tableview` | `open({ title, node, load })` shows a table in the table viewer. `node` is a value as the debugger sends it (`{ name, type, value, items, more }`); `parse(text)` makes one from a value written the way .jlb writes it, like `[name: "Ann", hp: 10]`. `load` (optional) is an async function giving back the whole table, for "Load all". |
+| `debugger` | `wanted(doc)`: whether Run will debug (breakpoints are set). |
+| `backups` | `flush()` backs every unsaved tab up now. |
+
 ### Everything else
 
 | Call | What it does |
