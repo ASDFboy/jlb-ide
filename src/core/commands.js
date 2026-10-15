@@ -68,8 +68,9 @@ export class Commands {
   handleKey(e) {
     const key = keyOf(e);
     if (!key) return false;
-    for (const id of this.list.keys()) {
-      if (this.keyFor(id) === key) {
+    for (const [id, cmd] of this.list) {
+      // A command that can't run right now leaves the key to whatever else uses it.
+      if (this.keyFor(id) === key && !(cmd.enabled && !cmd.enabled())) {
         e.preventDefault();
         e.stopPropagation();
         this.run(id);

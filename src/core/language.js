@@ -52,6 +52,7 @@ export class Language {
     s.onChange('editor.problemsAllFiles', () => this.publish());
     // Files opened in the background are checked too, one at a time.
     ide.events.on('file-open', (doc) => this.queueCheck(doc));
+    ide.events.on('doc-change', (doc) => this.queueCheck(doc));
     ide.events.on('file-close', (doc) => {
       this.byDoc.delete(doc.id);
       this.publish();

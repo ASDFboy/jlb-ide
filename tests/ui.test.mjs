@@ -873,6 +873,144 @@ test('follows IMPORT and LOAD: names, missing files, go to definition, hover and
   await page.evaluate(() => window.jlbIde.layout.showView('explorer'));
 });
 
+/** The text of the open tab whose path ends with `end` (like "ren/main.jlb"). */
+const tabText = (end) => page.evaluate((n) => {
+  const d = window.jlbIde.workspace.docs.find((x) => x.path?.replace(/\\/g, '/').endsWith('/' + n));
+  return d ? window.jlbIde.workspace.textOf(d) : null;
+}, end);
+const answerPrompt = async (text) => {
+  await page.waitForSelector('.dialog input.input');
+  await page.fill('.dialog input.input', text);
+  await page.keyboard.press('Enter');
+};
+const cursorOn = (line, find, plus = 1) => page.evaluate(([l, f, p]) => {
+  const v = window.jlbIde.editor.view;
+  const ln = v.state.doc.line(l);
+  v.dispatch({ selection: { anchor: ln.from + ln.text.indexOf(f) + p } });
+  v.focus();
+}, [line, find, plus]);
+
+test('finds in files, with options, and replaces with undo', async () => {
+  const dir = path.join(proj, 'findme');
+  fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'a.jlb'), 'score = 1\nPRINT(score)\n');
+  fs.writeFileSync(path.join(dir, 'lib', 'b.jlb'), 'FUNC add_score() {\n    RETURN score + 1\n}\n');
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'the score notes\n');
+  await page.evaluate((p) => window.jlbIde.workspace.setFolder(p), dir);
+  await page.keyboard.press('Control+Shift+F');
+  await page.waitForSelector('.search-view .sr-input');
+  await page.fill('.sr-input >> nth=0', 'score');
+  await page.waitForSelector('.sr-summary:has-text("5 results in 3 files")');
+  await page.click('.sr-opt[title="Whole words only"]');
+  await page.waitForSelector('.sr-summary:has-text("4 results in 3 files")');
+  await page.fill('.sr-include', '*.jlb');
+  await page.waitForSelector('.sr-summary:has-text("3 results in 2 files")');
+  assert.deepEqual(await page.$$eval('.sr-name', (e) => e.map((x) => x.textContent)), ['a.jlb', 'b.jlb']);
+  // A broken pattern says so.
+  await page.click('.sr-opt[title^="Use a pattern"]');
+  await page.fill('.sr-input >> nth=0', 'sc(ore');
+  await page.waitForSelector('.sr-summary.warn:has-text("That pattern doesn\'t work")');
+  await page.fill('.sr-input >> nth=0', 'sc(o)re');
+  await page.waitForSelector('.sr-summary:has-text("3 results in 2 files")');
+  // Clicking a result opens the file with the match selected.
+  await page.click('.sr-file:has-text("b.jlb") + .sr-lines .sr-line');
+  await page.waitForSelector('.tab.active:has-text("b.jlb")');
+  assert.equal(await page.evaluate(() => window.jlbIde.editor.view.state.sliceDoc(window.jlbIde.editor.view.state.selection.main.from, window.jlbIde.editor.view.state.selection.main.to)), 'score');
+  // Replace all, with $1 from the pattern: the open file is changed, the other one saved.
+  await page.click('.sr-expand');
+  await page.fill('.sr-input >> nth=1', 'p$1ints');
+  await page.waitForSelector('.sr-text ins:has-text("points")');
+  await page.click('.sr-replace-all');
+  await page.waitForSelector('.dialog:has-text("Replace 3 matches in 2 files")');
+  await page.click('.dialog-buttons button:has-text("Replace")');
+  await page.waitForSelector('.toast:has-text("Replaced 3 matches in 2 files")');
+  assert.equal(fs.readFileSync(path.join(dir, 'a.jlb'), 'utf8'), 'points = 1\nPRINT(points)\n');
+  assert.match(await tabText('findme/lib/b.jlb'), /RETURN points \+ 1/);
+  assert.match(fs.readFileSync(path.join(dir, 'lib', 'b.jlb'), 'utf8'), /RETURN score \+ 1/);
+  await page.waitForSelector('.sr-summary:has-text("No results")');
+  await page.click('.toast .toast-action:has-text("Undo")');
+  await page.waitForSelector('.toast:has-text("Undone.")');
+  assert.equal(fs.readFileSync(path.join(dir, 'a.jlb'), 'utf8'), 'score = 1\nPRINT(score)\n');
+  assert.match(await tabText('findme/lib/b.jlb'), /RETURN score \+ 1/);
+  // Put the options back for other tests.
+  for (const t of ['Whole words only', 'Use a pattern (regular expression)']) await page.click(`.sr-opt[title="${t}"]`);
+  await page.fill('.sr-include', '');
+  await page.click('.sr-expand');
+});
+
+test('renames a name everywhere it means the same thing', async () => {
+  const dir = path.join(proj, 'ren');
+  fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+  const main = 'IMPORT "lib/util.jlb"\nLOAD "tools.jlb"\ncount = 0\nFUNC bump(n) {\n    count += n\n    LOCAL temp = n\n    RETURN temp\n}\nbump(2)\nPRINT(count, helper(), tools.twice(count))\nFOR count2 IN [1] { PRINT(count2) }\nPOINT again\nGOTO again\n';
+  fs.writeFileSync(path.join(dir, 'main.jlb'), main);
+  fs.writeFileSync(path.join(dir, 'lib', 'util.jlb'), 'FUNC helper() {\n    RETURN count * 2\n}\n');
+  fs.writeFileSync(path.join(dir, 'tools.jlb'), 'FUNC twice(x) {\n    RETURN x * 2\n}\n');
+  fs.writeFileSync(path.join(dir, 'other.jlb'), 'count = 5\nPRINT(count)\n'); // not joined: stays as it is
+  await page.evaluate((p) => window.jlbIde.workspace.setFolder(p), dir);
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(dir, 'main.jlb'));
+  await page.waitForSelector('.tab.active:has-text("main.jlb")');
+
+  // A function's own local: only inside it, no questions asked.
+  await cursorOn(6, 'temp');
+  await page.keyboard.press('F2');
+  await answerPrompt('saved');
+  await page.waitForSelector('.toast:has-text("Renamed temp to saved in 2 places")');
+  assert.equal(await tabText('ren/main.jlb'), main.replace(/temp/g, 'saved'));
+  await page.keyboard.press('Control+z');
+  assert.equal(await tabText('ren/main.jlb'), main);
+
+  // A POINT and its GOTO.
+  await cursorOn(13, 'again');
+  await page.keyboard.press('F2');
+  await answerPrompt('top');
+  await page.waitForSelector('.toast:has-text("Renamed again to top in 2 places")');
+  await page.keyboard.press('Control+z');
+
+  // Not a name .jlb allows: says what would work.
+  await cursorOn(4, 'n)', 0);
+  await page.keyboard.press('F2');
+  await answerPrompt('myScore');
+  await page.waitForSelector('.toast:has-text("like my_score")');
+
+  // A name that's already used: asks first.
+  await cursorOn(9, 'bump');
+  await page.keyboard.press('F2');
+  await answerPrompt('helper');
+  await page.waitForSelector('.dialog:has-text("helper is already used in")');
+  await page.click('.dialog-buttons button:has-text("Cancel")');
+
+  // An outside name: every file that IMPORTs or is IMPORTed, but not other.jlb or count2.
+  await cursorOn(3, 'count');
+  await page.keyboard.press('F2');
+  await answerPrompt('total');
+  await page.waitForSelector('.dialog:has-text("Rename count to total in 5 places across 2 files")');
+  assert.match(await page.locator('.dialog-detail').innerText(), /main\.jlb: 4 places\nlib\/util\.jlb: 1 place \(not open\)/);
+  await page.click('.dialog-buttons button:has-text("Rename")');
+  await page.waitForSelector('.toast:has-text("Renamed count to total")');
+  const now = await tabText('ren/main.jlb');
+  assert.match(now, /^IMPORT "lib\/util.jlb"\nLOAD "tools.jlb"\ntotal = 0\nFUNC bump\(n\) \{\n    total \+= n/);
+  assert.match(now, /PRINT\(total, helper\(\), tools\.twice\(total\)\)\nFOR count2 IN \[1\] \{ PRINT\(count2\) \}/);
+  assert.equal(fs.readFileSync(path.join(dir, 'lib', 'util.jlb'), 'utf8'), 'FUNC helper() {\n    RETURN total * 2\n}\n');
+  assert.equal(fs.readFileSync(path.join(dir, 'other.jlb'), 'utf8'), 'count = 5\nPRINT(count)\n');
+
+  // tools.twice renames the function in the file LOAD brings in.
+  await cursorOn(10, 'twice');
+  await page.keyboard.press('F2');
+  await answerPrompt('double');
+  await page.click('.dialog-buttons button:has-text("Rename")');
+  await page.waitForSelector('.toast:has-text("Renamed twice to double")');
+  assert.equal(fs.readFileSync(path.join(dir, 'tools.jlb'), 'utf8'), 'FUNC double(x) {\n    RETURN x * 2\n}\n');
+  assert.match(await tabText('ren/main.jlb'), /tools\.double\(total\)/);
+
+  // In the file list, F2 still renames the file.
+  await page.evaluate(() => window.jlbIde.layout.showView('explorer'));
+  await page.focus('.tree-row:has-text("other.jlb")');
+  await page.keyboard.press('F2');
+  await page.waitForSelector('.dialog:has-text("Rename other.jlb")');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.jlbIde.workspace.saveAll());
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

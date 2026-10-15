@@ -72,6 +72,47 @@ const commands = {
   async delete_path({ path: p }) {
     await fs.rm(p, { recursive: true, force: true });
   },
+  async list_files({ root, limit = 20000 }) {
+    const st = await fs.stat(root).catch(() => null);
+    if (!st?.isDirectory()) throw `${root} isn't a folder`;
+    const files = [];
+    let truncated = false;
+    const stack = [root];
+    walk: while (stack.length) {
+      const dir = stack.pop();
+      const ents = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const e of ents) {
+        if (e.name.startsWith('.')) continue;
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (!['node_modules', 'target', '__pycache__'].includes(e.name)) stack.push(p);
+        } else if (e.isFile()) {
+          if (files.length >= limit) {
+            truncated = true;
+            break walk;
+          }
+          const s = await fs.stat(p).catch(() => null);
+          files.push({ path: p, size: s?.size || 0, modified: Math.floor(s?.mtimeMs || 0) });
+        }
+      }
+    }
+    files.sort((a, b) => (a.path.toLowerCase() < b.path.toLowerCase() ? -1 : a.path.toLowerCase() > b.path.toLowerCase() ? 1 : 0));
+    return { files, truncated };
+  },
+  async read_texts({ paths, max_bytes = 1 << 20 }) {
+    return Promise.all(paths.map(async (p) => {
+      try {
+        const s = await fs.stat(p);
+        if (!s.isFile() || s.size > max_bytes) return null;
+        const b = await fs.readFile(p);
+        if (b.includes(0)) return null;
+        const t = new TextDecoder('utf-8', { fatal: true }).decode(b);
+        return t;
+      } catch {
+        return null;
+      }
+    }));
+  },
   async run_program({ interpreter, file, cwd, args }) {
     if (!fss.existsSync(interpreter)) throw `couldn't find the interpreter at ${interpreter} (check Settings → Interpreters)`;
     const id = nextRun++;

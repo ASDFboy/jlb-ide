@@ -104,3 +104,86 @@ pub fn delete_path(path: String) -> Result<(), String> {
     }
     .map_err(|e| msg(e, "delete", &path))
 }
+
+#[derive(Serialize)]
+pub struct FileItem {
+    path: String,
+    size: u64,
+    modified: u64,
+}
+
+#[derive(Serialize)]
+pub struct FileList {
+    files: Vec<FileItem>,
+    /// True when there were more than `limit` files and the rest were left out.
+    truncated: bool,
+}
+
+/// Folders that hold tools' files rather than the person's own, skipped when listing.
+const SKIP_DIRS: &[&str] = &["node_modules", "target", "__pycache__"];
+
+fn millis(m: &std::fs::Metadata) -> u64 {
+    m.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Every file under a folder, sorted by path, up to `limit` of them (20,000 if not given).
+/// Hidden files and folders, links, and tool folders like node_modules are left out.
+#[tauri::command]
+pub fn list_files(root: String, limit: Option<usize>) -> Result<FileList, String> {
+    let limit = limit.unwrap_or(20_000);
+    if !Path::new(&root).is_dir() {
+        return Err(format!("{} isn't a folder", root));
+    }
+    let mut files = Vec::new();
+    let mut truncated = false;
+    let mut stack = vec![std::path::PathBuf::from(&root)];
+    'walk: while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.filter_map(|e| e.ok()) {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let Ok(ft) = e.file_type() else { continue };
+            if ft.is_dir() {
+                if !SKIP_DIRS.contains(&name.as_str()) {
+                    stack.push(e.path());
+                }
+            } else if ft.is_file() {
+                if files.len() >= limit {
+                    truncated = true;
+                    break 'walk;
+                }
+                let (size, modified) = e.metadata().map(|m| (m.len(), millis(&m))).unwrap_or((0, 0));
+                files.push(FileItem { path: e.path().to_string_lossy().into_owned(), size, modified });
+            }
+        }
+    }
+    files.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    Ok(FileList { files, truncated })
+}
+
+/// Several files' text in one go: null for a file that can't be read, isn't text,
+/// or is bigger than `max_bytes` (1 MB if not given).
+#[tauri::command]
+pub fn read_texts(paths: Vec<String>, max_bytes: Option<u64>) -> Vec<Option<String>> {
+    let max = max_bytes.unwrap_or(1 << 20);
+    paths
+        .iter()
+        .map(|p| {
+            let m = std::fs::metadata(p).ok()?;
+            if !m.is_file() || m.len() > max {
+                return None;
+            }
+            let bytes = std::fs::read(p).ok()?;
+            if bytes.contains(&0) {
+                return None;
+            }
+            String::from_utf8(bytes).ok()
+        })
+        .collect()
+}

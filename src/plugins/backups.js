@@ -85,6 +85,7 @@ export default {
     };
 
     api.events.on('editor-change', () => later(api.workspace.active));
+    api.events.on('doc-change', (doc) => later(doc));
     // Switching tabs: back up the tab being left straight away.
     let shown = api.workspace.active;
     api.events.on('active-change', (doc) => {
