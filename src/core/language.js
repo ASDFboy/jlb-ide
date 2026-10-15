@@ -22,6 +22,13 @@ export class Language {
     this.problems = [];
     const s = ide.settings;
     s.define({ key: 'editor.hover', title: 'Show info when the mouse rests on code', type: 'boolean', default: true, section: 'Editor' });
+    s.define({ key: 'editor.hoverCtrl', title: 'Only while holding Ctrl', description: 'Hover info appears only when you hold Ctrl (⌘ on a Mac) with the mouse over code, so it never gets in the way.', type: 'boolean', default: false, section: 'Editor' });
+    // Whether Ctrl is held, for the setting above.
+    this.ctrlHeld = false;
+    const track = (e) => (this.ctrlHeld = e.ctrlKey || e.metaKey);
+    window.addEventListener('mousemove', track, true);
+    window.addEventListener('keydown', track, true);
+    window.addEventListener('keyup', track, true);
     s.define({ key: 'editor.hoverDelay', title: 'Hover delay', description: 'Milliseconds before hover info appears.', type: 'number', default: 350, min: 0, max: 3000, section: 'Editor' });
     s.define({ key: 'editor.suggest', title: 'Suggest words while typing', description: 'Ctrl+Space shows suggestions even when this is off.', type: 'boolean', default: true, section: 'Editor' });
     s.define({ key: 'editor.checkDelay', title: 'Checking delay', description: 'Milliseconds after you stop typing before code is checked for mistakes.', type: 'number', default: 400, min: 0, max: 5000, section: 'Editor' });
@@ -100,6 +107,7 @@ export class Language {
   }
 
   async hover(view, pos, side) {
+    if (this.ide.settings.get('editor.hoverCtrl') && !this.ctrlHeld) return null;
     const ctx = this.context(view.state, pos);
     for (const p of this.hovers) {
       let r;

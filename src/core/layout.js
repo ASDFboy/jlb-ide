@@ -26,6 +26,9 @@ export class Layout {
     this.sideBody = h('div.side-body');
     this.sidebar = h('aside.sidebar', h('div.side-head', this.sideTitle, this.sideActions), this.sideBody);
     this.tabs = h('div.tabs', { role: 'tablist', 'aria-label': 'Open files' });
+    this.tabsEnd = h('div.tabs-end');
+    this.tabsBar = h('div.tabs-bar', this.tabs, this.tabsEnd);
+    this.crumbs = h('div.crumbs', { 'aria-label': 'Current file' });
     this.editorHost = h('div.editor-host');
     this.panelTabs = h('div.panel-tabs', { role: 'tablist', 'aria-label': 'Panels' });
     this.panelActions = h('div.panel-actions');
@@ -36,9 +39,9 @@ export class Layout {
 
     const sideGrip = h('div.grip.grip-x', { title: 'Drag to resize' });
     const bottomGrip = h('div.grip.grip-y', { title: 'Drag to resize' });
-    this.center = h('div.center', this.tabs, this.editorHost, bottomGrip, this.bottom);
+    this.center = h('div.center', this.tabsBar, this.editorHost, bottomGrip, this.bottom);
     root.append(
-      h('header.toolbar', h('div.brand', { title: 'JLB IDE' }, h('img', { src: 'icon.svg', alt: '' })), this.toolbarLeft, h('div.spacer'), this.toolbarRight),
+      h('header.toolbar', h('div.brand', { title: 'JLB IDE' }, h('img', { src: 'icon.svg', alt: '' })), this.crumbs, this.toolbarLeft, h('div.spacer'), this.toolbarRight),
       h('div.main', h('div.activity-col', this.activity, this.activityBottom), this.sidebar, sideGrip, this.center),
       h('footer.statusbar', this.statusLeft, h('div.spacer'), this.statusRight),
     );

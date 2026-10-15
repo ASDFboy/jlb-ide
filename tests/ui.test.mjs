@@ -232,6 +232,91 @@ test('saves a new file with Save as', async () => {
   await page.waitForFunction(() => !document.querySelector('.tab.active.dirty'));
 });
 
+test('error lines in Output are links to the code', async () => {
+  await page.click('.tree-row:has-text("crash.jlb")');
+  await page.waitForSelector('.tab.active:has-text("crash.jlb")');
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.crash-msg');
+  await page.click('.panel-tab:has-text("Output")');
+  await page.evaluate(() => window.jlbIde.editor.goTo(6));
+  await page.click('.out-link:has-text("line 3") >> nth=0');
+  const line = await page.evaluate(() => { const s = window.jlbIde.editor.view.state; return s.doc.lineAt(s.selection.main.head).number; });
+  assert.equal(line, 3);
+});
+
+test('a crash in an imported file opens and marks that file', async () => {
+  fs.mkdirSync(path.join(proj, 'tools'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'tools', 'helpers.jlb'), 'FUNC helper(n) {\n    RETURN n / 0\n}\n');
+  fs.writeFileSync(path.join(proj, 'uses.jlb'), 'IMPORT "tools/helpers.jlb"\nPRINT("start")\nPRINT(helper(4))\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, 'uses.jlb'));
+  await page.waitForSelector('.tab.active:has-text("uses.jlb")');
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.tab.active:has-text("helpers.jlb")');
+  await page.waitForSelector('.cm-crash-line');
+  const marked = await page.evaluate(() => window.jlbIde.editor.view.state.doc.lineAt(window.jlbIde.editor.view.posAtDOM(document.querySelector('.cm-crash-line'))).number);
+  assert.equal(marked, 2);
+  // Going back to the program shows no mark: the error isn't in it.
+  await page.click('.tab:has-text("uses.jlb")');
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('.cm-crash-line').count(), 0);
+});
+
+test('the toolbar shows where the file is', async () => {
+  assert.match(await page.locator('.crumbs').innerText(), /uses\.jlb/);
+  await page.keyboard.press('Control+n');
+  assert.match(await page.locator('.crumbs').innerText(), /not saved yet/);
+});
+
+test('tabs can be dragged into a new order, and listed', async () => {
+  const names = () => page.locator('.tab .tab-name').allInnerTexts();
+  const before = await names();
+  assert.ok(before.length >= 3);
+  await page.dragAndDrop('.tab >> nth=0', '.tab >> nth=2', { targetPosition: { x: 60, y: 10 } });
+  const after = await names();
+  assert.notDeepEqual(after, before);
+  assert.deepEqual([...after].sort(), [...before].sort());
+  await page.click('.tabs-menu');
+  assert.equal(await page.locator('.menu .menu-item').count(), before.length);
+  await page.keyboard.press('Escape');
+});
+
+test('files can be moved by dragging, and the tree works with arrow keys', async () => {
+  fs.mkdirSync(path.join(proj, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'move-me.jlb'), 'PRINT(1)\n');
+  await page.click('.side-actions [title="Refresh"]');
+  await page.waitForSelector('.tree-row:has-text("move-me.jlb")');
+  await page.dragAndDrop('.tree-row:has-text("move-me.jlb")', '.tree-row:has-text("lib")');
+  await page.waitForFunction(() => !document.querySelector('.tree-row[data-path$="move-me.jlb"]') || document.querySelector('.tree-row[data-path*="lib"][data-path$="move-me.jlb"]'));
+  assert.ok(fs.existsSync(path.join(proj, 'lib', 'move-me.jlb')));
+  assert.ok(!fs.existsSync(path.join(proj, 'move-me.jlb')));
+  // Dropping onto a folder opens it, showing the moved file.
+  await page.waitForSelector('.tree-row[data-path$="move-me.jlb"]');
+  await page.focus('.tree-row:has-text("lib")');
+  await page.keyboard.press('ArrowDown');
+  assert.match(await page.evaluate(() => document.activeElement.dataset.path), /move-me\.jlb$/);
+  await page.keyboard.press('ArrowLeft');
+  assert.match(await page.evaluate(() => document.activeElement.dataset.path), /lib$/);
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForFunction(() => !document.querySelector('.tree-row[data-path$="move-me.jlb"]'));
+});
+
+test('hover info can wait for Ctrl', async () => {
+  await page.evaluate(() => window.jlbIde.workspace.newFile('a = 1 & 0\n'));
+  await page.evaluate(() => window.jlbIde.settings.set('editor.hoverCtrl', true));
+  await page.waitForTimeout(100);
+  assert.equal(await hoverText(1, '&'), '');
+  await page.keyboard.down('Control');
+  assert.match(await hoverText(1, '&'), /AND/);
+  await page.keyboard.up('Control');
+  await page.evaluate(() => window.jlbIde.settings.set('editor.hoverCtrl', false));
+});
+
+test('the welcome screen lists recent files', async () => {
+  await page.evaluate(async () => { const ws = window.jlbIde.workspace; for (const d of [...ws.docs]) ws.closeNow(d); });
+  await page.waitForSelector('.welcome-section h2:has-text("Recent files")');
+  assert.match(await page.locator('.welcome').innerText(), /crash\.jlb/);
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

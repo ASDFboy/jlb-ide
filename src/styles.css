@@ -1,83 +1,101 @@
-/* JLB IDE. Colors come from the app icon: deep indigo, amber for things you can
-   run (the Run button, ALL-CAPS commands), sky blue for the cursor and focus. */
+/* JLB IDE in a Monokai palette: warm charcoal, off-white text, and Monokai's
+   accents. Green is for running, pink for keywords and errors, cyan for
+   built-in commands and focus, yellow for text, purple for numbers, and orange
+   for .jlb's quirky logic operators. */
 
 :root,
 :root[data-theme='night'] {
   color-scheme: dark;
-  --bg: #17142b;
-  --panel: #1c1934;
-  --chrome: #131025;
-  --raised: #27233f;
-  --hover: #2c2849;
-  --line: #2f2a50;
-  --text: #ebe7f9;
-  --muted: #a7a1c9;
-  --faint: #6f6997;
-  --amber: #f5b84c;
-  --amber-ink: #2a1c04;
-  --sky: #8fd6ff;
-  --rose: #ff7d8f;
-  --mint: #82e2b4;
-  --orange: #f3a35f;
-  --select: rgba(143, 214, 255, 0.2);
-  --active-line: rgba(255, 255, 255, 0.035);
-  --shadow: 0 18px 50px rgba(5, 3, 15, 0.55);
+  --bg: #272822;
+  --panel: #22231e;
+  --chrome: #1d1e1a;
+  --raised: #34352d;
+  --hover: #3e3d32;
+  --line: #3b3c34;
+  --text: #f8f8f2;
+  --muted: #bdbaa4;
+  --faint: #8a8670;
+  --amber: #e6db74;
+  --amber-ink: #272822;
+  --run: #a6e22e;
+  --run-ink: #1d1e1a;
+  --sky: #66d9ef;
+  --rose: #f92672;
+  --mint: #a6e22e;
+  --orange: #fd971f;
+  --select: rgba(102, 217, 239, 0.16);
+  --active-line: rgba(62, 61, 50, 0.55);
+  --tint-sky: rgba(102, 217, 239, 0.16);
+  --tint-sky-line: rgba(102, 217, 239, 0.5);
+  --tint-yellow: rgba(230, 219, 116, 0.16);
+  --tint-yellow-strong: rgba(230, 219, 116, 0.28);
+  --tint-rose: rgba(249, 38, 114, 0.14);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --backdrop: rgba(10, 10, 8, 0.5);
 
-  --syn-keyword: #f5b84c;
-  --syn-command: #ffd38a;
-  --syn-constant: #8fd6ff;
-  --syn-number: #9ee6c4;
-  --syn-string: #f4a9c6;
-  --syn-escape: #ffe0ec;
-  --syn-comment: #7d76a8;
-  --syn-logic: #c9abff;
-  --syn-operator: #b8b1db;
-  --syn-share: #8fd6ff;
-  --syn-func: #a3c6ff;
-  --syn-def: #f3f0ff;
-  --syn-label: #d7a1ff;
-  --syn-property: #d2cbef;
-  --syn-punct: #8e88b6;
-  --syn-invalid: #ff7d8f;
+  --syn-keyword: #f92672;
+  --syn-command: #66d9ef;
+  --syn-constant: #ae81ff;
+  --syn-number: #ae81ff;
+  --syn-string: #e6db74;
+  --syn-escape: #ae81ff;
+  --syn-comment: #88846f;
+  --syn-logic: #fd971f;
+  --syn-operator: #f92672;
+  --syn-share: #66d9ef;
+  --syn-func: #a6e22e;
+  --syn-def: #fd971f;
+  --syn-label: #a6e22e;
+  --syn-property: #f8f8f2;
+  --syn-punct: #cfcfc2;
+  --syn-invalid: #f92672;
 }
 
 :root[data-theme='day'] {
   color-scheme: light;
-  --bg: #fcfbff;
-  --panel: #f4f2fb;
-  --chrome: #eae7f6;
+  --bg: #fafaf8;
+  --panel: #f2f1ec;
+  --chrome: #e9e8e1;
   --raised: #ffffff;
-  --hover: #e6e2f4;
-  --line: #dbd6ee;
-  --text: #221d3c;
-  --muted: #5c5680;
-  --faint: #8e88ad;
-  --amber: #f5b84c;
-  --amber-ink: #2a1c04;
-  --sky: #1d6db3;
-  --rose: #c22640;
-  --mint: #12805a;
-  --orange: #b25a0c;
-  --select: rgba(29, 109, 179, 0.16);
-  --active-line: rgba(40, 30, 90, 0.04);
-  --shadow: 0 18px 50px rgba(40, 30, 90, 0.18);
+  --hover: #e4e3da;
+  --line: #d9d7cc;
+  --text: #272822;
+  --muted: #5b5847;
+  --faint: #827e68;
+  --amber: #9a8c14;
+  --amber-ink: #272822;
+  --run: #a6e22e;
+  --run-ink: #1d1e1a;
+  --sky: #0e7f98;
+  --rose: #c8125a;
+  --mint: #4f7d00;
+  --orange: #b85f00;
+  --select: rgba(14, 127, 152, 0.15);
+  --active-line: rgba(39, 40, 34, 0.04);
+  --tint-sky: rgba(14, 127, 152, 0.12);
+  --tint-sky-line: rgba(14, 127, 152, 0.45);
+  --tint-yellow: rgba(196, 180, 40, 0.2);
+  --tint-yellow-strong: rgba(196, 180, 40, 0.34);
+  --tint-rose: rgba(200, 18, 90, 0.1);
+  --shadow: 0 18px 50px rgba(39, 40, 34, 0.18);
+  --backdrop: rgba(39, 40, 34, 0.22);
 
-  --syn-keyword: #9a5800;
-  --syn-command: #85500a;
-  --syn-constant: #1d6db3;
-  --syn-number: #12805a;
-  --syn-string: #b0306b;
-  --syn-escape: #7a1446;
-  --syn-comment: #8e88ad;
-  --syn-logic: #7a3fd1;
-  --syn-operator: #5c5680;
-  --syn-share: #1d6db3;
-  --syn-func: #2a51b8;
-  --syn-def: #221d3c;
-  --syn-label: #8a2cbd;
-  --syn-property: #4b4570;
-  --syn-punct: #8e88ad;
-  --syn-invalid: #c22640;
+  --syn-keyword: #c8125a;
+  --syn-command: #0e7f98;
+  --syn-constant: #7444c4;
+  --syn-number: #7444c4;
+  --syn-string: #857a0c;
+  --syn-escape: #7444c4;
+  --syn-comment: #827e68;
+  --syn-logic: #b85f00;
+  --syn-operator: #c8125a;
+  --syn-share: #0e7f98;
+  --syn-func: #4f7d00;
+  --syn-def: #b85f00;
+  --syn-label: #4f7d00;
+  --syn-property: #272822;
+  --syn-punct: #6e6b5c;
+  --syn-invalid: #c8125a;
 }
 
 * {
@@ -412,10 +430,10 @@ kbd,
   padding: 0 16px 0 13px;
   border: 0;
   border-radius: 8px;
-  background: var(--amber);
-  color: var(--amber-ink);
+  background: var(--run);
+  color: var(--run-ink);
   font-weight: 700;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 2px 10px rgba(245, 184, 76, 0.22);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 2px 10px rgba(166, 226, 46, 0.18);
 }
 
 .run-btn:hover {
@@ -453,15 +471,65 @@ kbd,
 
 /* ---------- tabs ---------- */
 
-.tabs {
+.tabs-bar {
   height: 38px;
   flex: none;
   display: flex;
-  overflow-x: auto;
-  overflow-y: hidden;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+}
+
+.tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: thin;
+}
+
+.tabs-end {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.tab.drop-before {
+  box-shadow: inset 2px 0 0 var(--sky);
+}
+
+.tab.drop-after {
+  box-shadow: inset -2px 0 0 var(--sky);
+}
+
+/* where the current file is, in the toolbar */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.crumb {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crumb.current {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.crumb-sep {
+  color: var(--faint);
+}
+
+.crumb-note {
+  color: var(--faint);
+  font-style: italic;
 }
 
 .tab {
@@ -622,22 +690,22 @@ kbd,
 }
 
 .cm-matchingBracket {
-  background: rgba(143, 214, 255, 0.16) !important;
-  outline: 1px solid rgba(143, 214, 255, 0.5);
+  background: var(--tint-sky) !important;
+  outline: 1px solid var(--tint-sky-line);
   border-radius: 2px;
 }
 
 .cm-nonmatchingBracket {
-  background: rgba(255, 125, 143, 0.2) !important;
+  background: var(--tint-rose) !important;
 }
 
 .cm-selectionMatch {
-  background: rgba(245, 184, 76, 0.14);
+  background: var(--tint-yellow);
 }
 
 .cm-searchMatch {
-  background: rgba(245, 184, 76, 0.22);
-  outline: 1px solid rgba(245, 184, 76, 0.5);
+  background: var(--tint-yellow-strong);
+  outline: 1px solid var(--amber);
 }
 
 .cm-panels {
@@ -695,7 +763,7 @@ kbd,
 }
 
 .cm-crash-line {
-  background: rgba(255, 125, 143, 0.12);
+  background: var(--tint-rose);
   box-shadow: inset 3px 0 0 var(--rose);
 }
 
@@ -703,7 +771,7 @@ kbd,
   margin-left: 18px;
   padding: 0 8px;
   border-radius: 4px;
-  background: rgba(255, 125, 143, 0.16);
+  background: var(--tint-rose);
   color: var(--rose);
   font-family: 'Atkinson Hyperlegible', sans-serif;
   font-size: 0.86em;
@@ -1102,6 +1170,16 @@ select.input {
 
 .tree-row.active {
   background: var(--select);
+}
+
+.tree-row.drop-into,
+.tree-root.drop-into {
+  background: var(--select);
+  box-shadow: inset 0 0 0 1px var(--sky);
+}
+
+.tree-row:focus-visible {
+  outline-offset: -2px;
 }
 
 .tree-row.other {
@@ -1670,6 +1748,36 @@ select.input {
   white-space: nowrap;
 }
 
+.value-cell.folded code {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.value-tools {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+  font-size: 0.88em;
+}
+
+.out-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--rose);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.out-link:hover {
+  text-decoration-style: solid;
+}
+
 .var-value code {
   color: var(--syn-string);
   word-break: break-word;
@@ -1851,13 +1959,7 @@ button.status-item:hover {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(8, 6, 20, 0.45);
-}
-
-:root[data-theme='day'] .dialog-back,
-:root[data-theme='day'] .palette-back,
-:root[data-theme='day'] .settings-back {
-  background: rgba(40, 30, 90, 0.18);
+  background: var(--backdrop);
 }
 
 .dialog-back {

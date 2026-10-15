@@ -147,6 +147,7 @@ export class Runner {
       return;
     }
     this.run_ = { id, doc, it, start: performance.now(), stderrLine: '', crash: null };
+    this.lastDoc = doc;
     this.renderRunButton();
     this.setInputEnabled(true);
     this.ide.events.emit('run-start', { doc, interpreter: it });
@@ -197,7 +198,47 @@ export class Runner {
       }
       return;
     }
-    this.write(line, 'err');
+    this.writeLinked(line, 'err');
+  }
+
+  /** Writes an error line with its "line N" parts as links to the code. */
+  writeLinked(line, kind) {
+    // "ERROR in helpers.jlb, line 4" names a file; "f()  line 3" is in the program itself.
+    const re = /\bin ([^,]+?\.jlb), line (\d+)|\bline (\d+)/g;
+    let last = 0;
+    let m;
+    while ((m = re.exec(line))) {
+      let start = m.index;
+      if (m[1]) start += 3; // keep "in " as plain text
+      if (start > last) this.write(line.slice(last, start), kind);
+      const file = m[1] || null;
+      const n = Number(m[2] || m[3]);
+      // In "helper()  line 2", the line is in the file where helper is.
+      const func = !file ? line.slice(0, start).match(/(\w+)\(\)\s*$/)?.[1] : null;
+      const text = line.slice(start, m.index + m[0].length);
+      this.lastLine ||= (() => {
+        const l = h('div.out-line');
+        this.outEl.append(l);
+        return l;
+      })();
+      this.lastLine.append(h('button.out-link', { title: 'Go to this line', on: { click: () => this.goToLine(file, n, func) } }, text));
+      last = start + text.length;
+    }
+    this.write(line.slice(last), kind);
+  }
+
+  async goToLine(file, line, func) {
+    const doc = this.lastDoc;
+    const ws = this.ide.workspace;
+    const crash = this.lastCrash;
+    const path = (file && crash?.file === file && crash.path) || (func && crash?.frames.find((f) => f.name === func && f.line === line)?.path);
+    if (path) {
+      await ws.openFile(path);
+    } else if (file && doc?.path && file !== doc.name) {
+      const sep = doc.path.includes('\\') ? '\\' : '/';
+      await ws.openFile(doc.path.replace(/[\\/][^\\/]*$/, '') + sep + file);
+    } else if (doc && ws.docs.includes(doc) && ws.active !== doc) ws.activate(doc);
+    this.ide.editor.goTo(line, 1, { select: true });
   }
 
   onExit(payload) {
@@ -216,6 +257,7 @@ export class Runner {
     if (r.stopped) this.system('Stopped');
     else if (code === 0) this.system(`Finished${time}`, 'ok');
     else this.system(`Ended with an error${time}`, 'error');
+    this.lastCrash = r.crash;
     if (r.crash) this.ide.events.emit('crash', { report: r.crash, doc: r.doc, interpreter: r.it });
     this.ide.events.emit('run-exit', { code, stopped: !!r.stopped, doc: r.doc });
   }
