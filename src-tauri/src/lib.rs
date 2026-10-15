@@ -29,6 +29,7 @@ pub fn run() {
             runner::run_program,
             runner::send_input,
             runner::stop_program,
+            runner::run_capture,
             runner::check_code,
             runner::repl_eval,
             runner::repl_answer,

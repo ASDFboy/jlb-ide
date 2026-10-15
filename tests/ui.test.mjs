@@ -712,6 +712,74 @@ test('the debugger opens big tables in the table viewer and loads them in full',
   await page.evaluate(() => window.jlbIde.commands.run('debug.clear'));
 });
 
+test('Compare runs both interpreters and marks where they differ', async () => {
+  const file = path.join(proj, 'cmp.jlb');
+  fs.writeFileSync(file, 'name = INPUT("Name? ")\nPRINT("Hi " + name)\nPRINT(0.1 + 0.2, 2 ^ 70)\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.keyboard.press('Control+Shift+F5');
+  await page.waitForSelector('.cmp-head');
+  await page.click('.cmp-head button:has-text("Input")');
+  await page.fill('.cmp-input', 'Sam');
+  await page.click('.cmp-head button:has-text("Compare")');
+  await page.waitForSelector('.cmp-verdict');
+  assert.match(await page.locator('.cmp-verdict').innerText(), /Same output from both interpreters/);
+  const cols = await page.locator('.cmp-table').innerText();
+  assert.match(cols, /Name\? Hi Sam/);
+  assert.match(cols, /0\.3 1180591620717411303424/);
+  assert.match(await page.locator('.cmp-cols').innerText(), /Rust[\s\S]*exit 0[\s\S]*C[\s\S]*exit 0/);
+  // A pretend "C interpreter" that prints something else shows the difference.
+  const fake = path.join(os.tmpdir(), `fake-jlb-c-${process.pid}.sh`);
+  fs.writeFileSync(fake, '#!/bin/sh\ncat > /dev/null\necho "Name? Hi Sam"\necho "0.30000000000000004 1180591620717411303424"\n');
+  fs.chmodSync(fake, 0o755);
+  await page.evaluate((p) => window.jlbIde.settings.set('interpreters.c', p), fake);
+  await page.click('.cmp-head button:has-text("Compare")');
+  await page.waitForSelector('.cmp-verdict.bad');
+  assert.match(await page.locator('.cmp-verdict').innerText(), /differ, starting on line 2/);
+  assert.equal(await page.locator('.cmp-line.old').innerText(), '0.3 1180591620717411303424');
+  assert.equal(await page.locator('.cmp-line.new').innerText(), '0.30000000000000004 1180591620717411303424');
+  await page.evaluate(() => window.jlbIde.settings.set('interpreters.c', ''));
+});
+
+test('the test runner finds tests, runs them with both interpreters, and saves new expected output', async () => {
+  const dir = path.join(proj, 'tests');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'good.jlb'), 'PRINT(1 + 1)\n');
+  fs.writeFileSync(path.join(dir, 'good.out'), '2\n');
+  fs.writeFileSync(path.join(dir, 'asks.jlb'), 'n = NUM(INPUT())\nPRINT(n * 2)\n');
+  fs.writeFileSync(path.join(dir, 'asks.in'), '21\n');
+  fs.writeFileSync(path.join(dir, 'asks.out'), '42\n');
+  fs.writeFileSync(path.join(dir, 'wrong.jlb'), 'PRINT("a")\nPRINT("b")\n');
+  fs.writeFileSync(path.join(dir, 'wrong.out'), 'a\nc\n');
+  fs.writeFileSync(path.join(dir, 'not-a-test.jlb'), 'PRINT(1)\n');
+  await page.evaluate((p) => window.jlbIde.workspace.setFolder(p), proj);
+  await page.click('.panel-tab:has-text("Tests")');
+  await page.waitForSelector('.tst-item');
+  const names = await page.$$eval('.tst-name', (e) => e.map((x) => x.textContent));
+  assert.deepEqual(names.filter((n) => n.startsWith('tests/')), ['tests/asks.jlb', 'tests/good.jlb', 'tests/wrong.jlb']);
+  await page.click('.tst-head button:has-text("Run all")');
+  await page.waitForFunction(() => document.querySelectorAll('.tst-chip').length >= 6 && !document.querySelector('.tst-chip.running') && document.querySelector('.tst-head')?.innerText.includes('Run all'));
+  const row = (n) => page.locator(`.tst-item:has(.tst-name:text-is("tests/${n}.jlb"))`);
+  assert.match(await row('good').innerText(), /Rust ✓[\s\S]*C ✓/);
+  assert.match(await row('asks').innerText(), /Rust ✓[\s\S]*C ✓/);
+  assert.match(await row('wrong').innerText(), /Rust ✗[\s\S]*C ✗/);
+  await row('wrong').click();
+  const detail = page.locator('.tst-detail');
+  assert.match(await detail.innerText(), /printed something different/);
+  const rows = await page.locator('.tst-detail .tst-diff').first().locator('.tst-row').evaluateAll((r) => r.map((x) => x.className.replace('tst-row ', '') + ':' + x.textContent.slice(1)));
+  assert.deepEqual(rows, ['same:a', 'old:c', 'new:b']);
+  // Accept Rust's output as the expected output.
+  await page.click('.tst-detail button:has-text("Use Rust")');
+  await page.click('.dialog-buttons button:has-text("Save")');
+  await page.waitForFunction(() => /Rust ✓[\s\S]*C ✓/.test([...document.querySelectorAll('.tst-item')].find((e) => e.textContent.includes('wrong'))?.innerText || ''));
+  assert.equal(fs.readFileSync(path.join(dir, 'wrong.out'), 'utf8'), 'a\nb\n');
+  // Make a test from the current file.
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(dir, 'not-a-test.jlb'));
+  await page.evaluate(() => { window.jlbIde.commands.run('tests.fromFile'); }); // (it waits for the dialog)
+  await page.click('.dialog-buttons button:has-text("Make test")');
+  await page.waitForSelector('.tst-name:text-is("tests/not-a-test.jlb")');
+  assert.equal(fs.readFileSync(path.join(dir, 'not-a-test.out'), 'utf8'), '1\n');
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

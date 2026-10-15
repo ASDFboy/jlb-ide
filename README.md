@@ -24,10 +24,14 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 - **Crash report viewer.** When a program crashes, a panel shows the error, the function calls and every variable's value in a table. The crashing line is marked in your code, and resting the mouse on a variable shows what it held when the program crashed.
 - **Quirk explainer.** Rest the mouse on any operator, command or keyword for a plain-English explanation: how `&` differs from `&&`, what `!%` and `!^` do, why `!=` is an error, what `0xFF` equals. Your own functions show their inputs, and which ones are shared with `@`.
 - **Quick-try console.** Type a bit of .jlb and see the result and its type right away: `"25" * 2` gives `"2525"` (TEXT). Variables carry over between snippets, `INPUT` asks right in the panel, and a snippet stuck in a loop can be stopped. Select code in the editor and press Ctrl+Enter to try it, or load the whole file to try out its functions.
-- **Run with Rust or C.** Switch interpreters with one click in the toolbar. Programs that use `INPUT` work: type your answer in the Output panel.
+- **Run with Rust or C.** Both interpreters come with the IDE; switch with one click in the toolbar. Programs that use `INPUT` work: type your answer in the Output panel.
+- **Compare Rust and C.** Ctrl+Shift+F5 runs the current file with both and shows the two outputs side by side, with any differences marked and which one was faster.
+- **Test runner.** A test is a program with a `.out` file next to it holding what it should print (and a `.in` file with its `INPUT` answers, if it needs any). The Tests panel finds them in your folder, runs them with either interpreter or both, and shows exactly what differs. One click makes a program's current output its expected output, or makes the current file a test.
 - **The language guide, built in.** The whole .jlb reference in the sidebar, searchable, with a button to open any example as a new file.
 
 ![Stopped at a breakpoint, with the variables in the Debug view and a table open in the table viewer](docs/images/debugger.png)
+
+![The Tests panel: tests run with both interpreters, and what a failing one printed](docs/images/tests.png)
 
 ![Warnings for .jlb slip-ups, with a one-click fix](docs/images/checks.png)
 
@@ -50,7 +54,6 @@ Anyone can add features with a plugin: a folder with a `plugin.json` and a `main
 ## Good to know
 
 - **The Windows downloads aren't code-signed** (a signing certificate costs money every year), so Windows SmartScreen may warn the first time. Choose **More info → Run anyway**.
-- **The C interpreter isn't finished yet.** Once [jlb-c](https://github.com/ASDFboy/jlb-c) exists, point the IDE at it in Settings → Interpreters, and the C button in the toolbar starts working.
 - **The debugger needs the Rust interpreter.** With C chosen, Run ignores breakpoints, and Start debugging switches to Rust for that run.
 - **Plugins are trusted code.** They can read and change your files and run programs, like extensions in other editors, so only install plugins you trust.
 - **Ready-made downloads are Windows only for now.** On macOS and Linux, [build it from source](#building-from-source).
@@ -87,6 +90,7 @@ In **Settings → Files**, **Edit .jlb files with JLB IDE** adds **Edit with JLB
 | F6 | start debugging, stopping at the first line |
 | F8 | continue (or pause, while running) |
 | F10, F11, Shift+F11 | step over, step into, step out |
+| Ctrl+Shift+F5 | compare the Rust and C interpreters on this file |
 | Ctrl+Shift+P | show every command |
 | Ctrl+, | settings |
 | Ctrl+S, Ctrl+Shift+S | save, save as |
@@ -110,7 +114,7 @@ You need [Node.js](https://nodejs.org) 18 or newer and [Rust](https://rustup.rs)
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev
 ```
 
-1. Build the interpreter from [jlb-rust](https://github.com/ASDFboy/jlb-rust) with `cargo build --release`, and copy `target/release/jlb` (`jlb.exe` on Windows) into `src-tauri/interpreters/`.
+1. Build the interpreters and copy them into `src-tauri/interpreters/`: from [jlb-rust](https://github.com/ASDFboy/jlb-rust) with `cargo build --release` (it makes `target/release/jlb`, or `jlb.exe` on Windows), and from [jlb-c](https://github.com/ASDFboy/jlb-c) with `make` (`jlb-c`). The IDE works with just one of them.
 2. In this folder:
 
    ```text
@@ -137,13 +141,13 @@ Then open <http://127.0.0.1:5180>. `npm run dev:web` rebuilds on every change. T
 
 ### Tests
 
-`npm test` drives the whole interface in a real browser against the real interpreter: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, Quick-try, go to definition, switching features off in Settings, plugins, and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
+`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
 
 ## How it works
 
 JLB IDE is a [Tauri](https://tauri.app) app: a small Rust program that opens a window using the web engine already on your computer (WebView2 on Windows), instead of shipping a whole browser like Electron apps do. That keeps it to a 2 MB installer and modest memory use. The editor is [CodeMirror 6](https://codemirror.net).
 
-It talks to the interpreters through their [editor modes](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes): `jlb --check` for live checking, `jlb --ide` for running (live output and a JSON crash report), and `jlb --repl` for Quick-try. Any interpreter with those modes works with the IDE.
+It talks to the interpreters through their [editor modes](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes): `jlb --check` for live checking, `jlb --ide` for running (live output and a JSON crash report), and `jlb --repl` for Quick-try. Any interpreter with those modes works with the IDE. The debugger uses the Rust interpreter's `--debug` mode.
 
 | Path | What's in it |
 | --- | --- |

@@ -29,9 +29,11 @@ import navigate from './plugins/navigate.js';
 import docs from './plugins/docs.js';
 import backups from './plugins/backups.js';
 import debuggerPlugin from './plugins/debugger.js';
+import compare from './plugins/compare.js';
+import testsPlugin from './plugins/tests.js';
 import tableview from './plugins/tableview.js';
 
-const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups, tableview, debuggerPlugin];
+const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups, tableview, debuggerPlugin, compare, testsPlugin];
 
 async function start() {
   const ide = { events: new Emitter() };
@@ -89,7 +91,7 @@ function registerCommands(ide) {
   add('tab.next', 'Next file', () => ws.cycle(1), 'Ctrl+Tab', 'View');
   add('tab.prev', 'Previous file', () => ws.cycle(-1), 'Ctrl+Shift+Tab', 'View');
   add('view.palette', 'Show all commands', () => c.palette(), 'Ctrl+Shift+P', 'View');
-  add('view.settings', 'Open settings', () => openSettings(ide), 'Ctrl+,', 'View');
+  add('view.settings', 'Open settings', (section) => openSettings(ide, typeof section === 'string' ? section : undefined), 'Ctrl+,', 'View');
   add('view.shortcuts', 'Change keyboard shortcuts', () => openSettings(ide, 'Keyboard shortcuts'), null, 'View');
   add('view.sidebar', 'Show or hide the sidebar', () => s.set('layout.sidebarOpen', !s.get('layout.sidebarOpen')), 'Ctrl+B', 'View');
   add('view.panel', 'Show or hide the bottom panel', () => s.set('layout.bottomOpen', !s.get('layout.bottomOpen')), 'Ctrl+J', 'View');

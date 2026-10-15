@@ -151,6 +151,81 @@ pub fn stop_program(runs: State<Runs>, id: u32) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- running to completion (comparing, tests) ----------
+
+#[derive(Serialize)]
+pub struct Captured {
+    stdout: String,
+    stderr: String,
+    code: Option<i32>,
+    ms: f64,
+    timed_out: bool,
+}
+
+/// At most this much of each stream is kept (a runaway PRINT loop can't fill the memory).
+const CAPTURE_LIMIT: usize = 4 * 1024 * 1024;
+
+fn read_capped(mut r: impl Read) -> String {
+    let mut out = Vec::new();
+    let mut buf = [0u8; 65536];
+    loop {
+        match r.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                if out.len() < CAPTURE_LIMIT {
+                    let room = CAPTURE_LIMIT - out.len();
+                    out.extend_from_slice(&buf[..n.min(room)]);
+                }
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Runs a program to the end with `input` typed in, and gives back everything it printed.
+/// It's stopped after `timeout_ms`.
+#[tauri::command]
+pub async fn run_capture(interpreter: String, file: String, cwd: String, args: Vec<String>, input: String, timeout_ms: u64) -> Result<Captured, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = command(&interpreter);
+        cmd.args(&args).arg(&file).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if !cwd.is_empty() {
+            cmd.current_dir(&cwd);
+        }
+        let start = std::time::Instant::now();
+        let mut child = cmd.spawn().map_err(|e| spawn_error(e, &interpreter))?;
+        let mut stdin = child.stdin.take().unwrap();
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(input.as_bytes());
+        });
+        let out = child.stdout.take().unwrap();
+        let err = child.stderr.take().unwrap();
+        let out_t = std::thread::spawn(move || read_capped(out));
+        let err_t = std::thread::spawn(move || read_capped(err));
+        let mut timed_out = false;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(s)) => break Some(s),
+                Ok(None) => {}
+                Err(_) => break None,
+            }
+            if start.elapsed().as_millis() as u64 >= timeout_ms {
+                timed_out = true;
+                let _ = child.kill();
+                break child.wait().ok();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
+        let ms = start.elapsed().as_secs_f64() * 1000.0;
+        let _ = writer.join();
+        let stdout = out_t.join().unwrap_or_default();
+        let stderr = err_t.join().unwrap_or_default();
+        Ok(Captured { stdout, stderr, code: status.and_then(|s| s.code()), ms, timed_out })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ---------- syntax checks ----------
 
 /// Runs `interpreter --check -` on the code and returns its JSON reply.

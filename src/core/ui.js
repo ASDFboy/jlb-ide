@@ -67,6 +67,7 @@ const ICONS = {
   'step-over': '<path d="M4 14a8 8 0 0 1 14.5-4.5"/><path d="M19.5 4.5v5.5h-5.5"/><circle cx="12" cy="19" r="2" fill="currentColor"/>',
   'step-into': '<path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><circle cx="12" cy="19.5" r="2" fill="currentColor"/>',
   'step-out': '<path d="M12 14V4"/><path d="M8 8l4-4 4 4"/><circle cx="12" cy="19.5" r="2" fill="currentColor"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 10v10"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
   code: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
