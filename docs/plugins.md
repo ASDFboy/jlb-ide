@@ -6,7 +6,7 @@ A plugin adds features to JLB IDE: commands, panels, hover info, suggestions, mi
 
 1. Open **Plugins** (the puzzle piece at the bottom left) and click **Create a plugin**.
 2. Give it a name. The IDE writes a working example to the plugins folder and opens its `main.js`.
-3. Change the code, save, and click **Reload plugins**.
+3. Change the code and save. The IDE notices and reloads the plugin within a couple of seconds (or click **Reload plugins** if you've switched off *Reload plugins when their files change* in Settings).
 
 The example counts the words in the current file, shows the count in the status bar, adds a command, a setting and a check. It's a good template to start from.
 
@@ -20,7 +20,7 @@ Each plugin is a folder inside the plugins folder:
 | macOS | `~/Library/Application Support/io.github.asdfboy.jlbide/plugins` |
 | Linux | `~/.config/io.github.asdfboy.jlbide/plugins` |
 
-The exact path is shown at the bottom of the Plugins view. To install a plugin, put its folder there and click **Reload plugins**.
+The exact path is shown at the bottom of the Plugins view. To install a plugin, click **Install from a folder** in the Plugins view and pick the plugin's folder (the one with `plugin.json` in it); it's copied into the plugins folder and started. You can also put the folder there yourself.
 
 ```text
 plugins/
@@ -222,7 +222,7 @@ The IDE's own commands, for `api.commands.run(id)`:
 | `navigate.definition`, `navigate.line` | getting around |
 | `quicktry.focus`, `quicktry.selection` | Quick-try |
 | `docs.show` | the language guide |
-| `plugins.reload`, `plugins.create` | plugins |
+| `plugins.reload`, `plugins.create`, `plugins.install` | plugins |
 
 ## A bigger example
 

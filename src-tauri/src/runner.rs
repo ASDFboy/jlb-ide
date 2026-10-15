@@ -249,12 +249,21 @@ pub async fn repl_eval(repl: State<'_, Repl>, interpreter: String, cwd: String, 
         *guard = None;
         return Err("the Quick-try session stopped; try again".into());
     }
+    let r = read_reply(s);
+    if r.is_err() {
+        *guard = None;
+    }
+    r
+}
+
+/// Reads output until the session's next reply. The reply is either the
+/// snippet's result, or {"input": prompt} when INPUT is waiting for an answer.
+fn read_reply(s: &mut Session) -> Result<ReplReply, String> {
     let mut output = String::new();
     loop {
         let mut line = String::new();
         match s.stdout.read_line(&mut line) {
             Ok(0) | Err(_) => {
-                *guard = None;
                 return Err("the Quick-try session stopped (it was reset, or the interpreter doesn't support --repl)".into());
             }
             Ok(_) => {}
@@ -264,6 +273,23 @@ pub async fn repl_eval(repl: State<'_, Repl>, interpreter: String, cwd: String, 
         }
         output.push_str(&line);
     }
+}
+
+/// Answers INPUT in the running snippet, then waits for its next reply.
+#[tauri::command]
+pub async fn repl_answer(repl: State<'_, Repl>, text: String) -> Result<ReplReply, String> {
+    let mut guard = repl.session.lock().unwrap();
+    let s = guard.as_mut().ok_or("the Quick-try session isn't running")?;
+    let line = text.replace(['\n', '\r'], " ") + "\n";
+    if s.stdin.write_all(line.as_bytes()).and_then(|_| s.stdin.flush()).is_err() {
+        *guard = None;
+        return Err("the Quick-try session stopped; try again".into());
+    }
+    let r = read_reply(s);
+    if r.is_err() {
+        *guard = None;
+    }
+    r
 }
 
 /// Clears the Quick-try session's variables (and stops a snippet that's stuck).

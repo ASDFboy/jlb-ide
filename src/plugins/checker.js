@@ -46,7 +46,8 @@ export default {
           }
         }
         if (r.ok) return [];
-        return [{ line: r.line, col: r.col || undefined, severity: 'error', message: r.message, fix: fixFor(r.message, text, r.line, r.col) }];
+        // Newer interpreters list every problem; older ones give just the first.
+        return (r.errors || [r]).map((e) => ({ line: e.line, col: e.col || undefined, severity: 'error', message: e.message, fix: fixFor(e.message) }));
       },
     });
 
@@ -67,7 +68,7 @@ export default {
 };
 
 /** One-click fixes for the interpreter's suggestions. */
-function fixFor(message, text, line, col) {
+function fixFor(message) {
   let m = message.match(/^did you mean ([A-Z_]+)\?/);
   if (m) return { label: `Change to ${m[1]}`, text: m[1] };
   m = message.match(/^"(\w+)" should be "(\w+)"/);
@@ -123,20 +124,71 @@ function gotoPoints({ gotos, points }) {
   }));
 }
 
-function undefinedNames({ uses, defined }) {
+// Names follow .jlb's scope rules: inside a function you see its inputs, its own
+// names and the globals (no closures); outside, only globals. FOR and FAIL names
+// exist only inside their block. At the top level, a name must already have a value
+// when its line runs, so using it above the line that gives it one is a mistake too.
+function undefinedNames({ uses, defined, globals, funcs, loads, gotos, points, lineAt }) {
   const out = [];
   const seen = new Set();
+  const jumps = gotos.length > 0 || points.size > 0; // GOTO can run lines out of order
+  const ownerOf = (name) => funcs.find((f) => f.locals.has(name) || paramNames(f).includes(name));
   for (const u of uses) {
-    if (defined.has(u.name) || seen.has(u.line + ':' + u.name)) continue;
-    seen.add(u.line + ':' + u.name);
-    const close = [...defined].filter((d) => near(d, u.name)).slice(0, 2);
-    out.push({
-      line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
-      message: `${u.name} is never given a value in this file${close.length ? `. Did you mean ${close.join(' or ')}?` : '.'}`,
-      fix: close.length ? close.map((c) => ({ label: `Change to ${c}`, text: c })) : undefined,
-    });
+    const key = u.line + ':' + u.name;
+    if (seen.has(key)) continue;
+    const fn = u.func >= 0 ? funcs[u.func] : null;
+    const visible = u.blockNames.has(u.name) || globals.has(u.name) || loads.has(u.name)
+      || (fn && (fn.locals.has(u.name) || paramNames(fn).includes(u.name)));
+    if (!visible) {
+      seen.add(key);
+      const owner = ownerOf(u.name);
+      if (owner && owner !== fn) {
+        const where = owner.name ? `${owner.name}()` : `the function on line ${owner.line}`;
+        out.push({
+          line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
+          message: `${u.name} only exists inside ${where}, so it has no value here. Give it a value outside the function to share it, or pass it in.`,
+        });
+        continue;
+      }
+      if (defined.has(u.name)) {
+        out.push({
+          line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
+          message: `${u.name} only exists inside its own FOR or FAIL block, so it has no value here.`,
+        });
+        continue;
+      }
+      const close = [...visibleNames(u, fn, globals, loads)].filter((d) => near(d, u.name)).slice(0, 2);
+      out.push({
+        line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
+        message: `${u.name} is never given a value in this file${close.length ? `. Did you mean ${close.join(' or ')}?` : '.'}`,
+        fix: close.length ? close.map((c) => ({ label: `Change to ${c}`, text: c })) : undefined,
+      });
+      continue;
+    }
+    // Top-level code runs in order, so a value given further down isn't there yet.
+    if (!fn && !jumps && u.depth === 0 && !u.blockNames.has(u.name) && !loads.has(u.name) && globals.get(u.name) >= u.off) {
+      seen.add(key);
+      const at = lineAt(globals.get(u.name));
+      const isFunc = funcs.some((f) => f.name === u.name && f.inFunc < 0);
+      out.push({
+        line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
+        message: isFunc
+          ? `${u.name}() is used before its FUNC line has run (line ${at}). Move the FUNC above this line.`
+          : globals.get(u.name) === u.off
+            ? `${u.name} has no value yet, so it can't be changed here. Give it a starting value first, like ${u.name} = 0.`
+            : `${u.name} is used before it's given a value (line ${at} gives it one).`,
+      });
+    }
   }
   return out;
+}
+
+const paramNames = (f) => f.params.map((p) => p.replace(/^(@|\.\.\.)/, ''));
+
+function visibleNames(u, fn, globals, loads) {
+  const names = new Set([...u.blockNames, ...globals.keys(), ...loads]);
+  if (fn) for (const n of [...fn.locals, ...paramNames(fn)]) names.add(n);
+  return names;
 }
 
 /** True when two names are one small typo apart. */

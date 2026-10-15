@@ -60,7 +60,8 @@ before(async () => {
   browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark' });
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  // Stopping a Quick-try snippet makes its pending call fail on purpose.
+  page.on('console', (m) => m.type() === 'error' && !m.location().url?.endsWith('/__bridge/repl_eval') && errors.push(`${m.text()} (${m.location().url})`));
   await page.goto(URL_);
   await page.waitForSelector('body.ready');
 });
@@ -315,6 +316,107 @@ test('the welcome screen lists recent files', async () => {
   await page.evaluate(async () => { const ws = window.jlbIde.workspace; for (const d of [...ws.docs]) ws.closeNow(d); });
   await page.waitForSelector('.welcome-section h2:has-text("Recent files")');
   assert.match(await page.locator('.welcome').innerText(), /crash\.jlb/);
+});
+
+test('the syntax check lists several mistakes at once', async () => {
+  await page.evaluate(() => window.jlbIde.workspace.newFile(''));
+  await setText('x = 1\nIF x == 1 {\n  y = * 2\n}\nz = 3 3\n');
+  const p = await problems();
+  assert.match(p, /expected a value but found `\*`/);
+  assert.match(p, /two statements on one line/);
+});
+
+test('knows where names exist: functions, FOR blocks, and lines that run later', async () => {
+  await setText('PRINT(total)\ntotal = 1\nFUNC f(a) {\n    inside = a\n    RETURN inside + total\n}\nPRINT(inside)\nFOR i IN [1, 2] {\n    PRINT(i)\n}\nPRINT(i)\nPRINT(sq(2))\nFUNC sq(n) {\n    RETURN n * n\n}\ncount += 1\n');
+  const p = await problems();
+  assert.match(p, /total is used before it's given a value \(line 2 gives it one\)/);
+  assert.match(p, /inside only exists inside f\(\)/);
+  assert.match(p, /i only exists inside its own FOR or FAIL block/);
+  assert.match(p, /sq\(\) is used before its FUNC line has run \(line 13\)/);
+  assert.match(p, /count has no value yet/);
+  assert.doesNotMatch(p, /Line 5\b/); // inside + total inside the function is fine
+});
+
+test('Problems lists every open file', async () => {
+  fs.writeFileSync(path.join(proj, 'oops.jlb'), 'PRINT(oops)\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, 'oops.jlb'));
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, 'guess.jlb'));
+  const p = await problems();
+  assert.match(p, /oops\.jlb/);
+  assert.match(p, /oops is never given a value/);
+  await page.click('.problem:has-text("oops is never given")');
+  assert.equal(await page.evaluate(() => window.jlbIde.workspace.active.name), 'oops.jlb');
+  await page.evaluate(() => window.jlbIde.settings.set('editor.problemsAllFiles', false));
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, 'guess.jlb'));
+  assert.doesNotMatch(await problems(), /oops/);
+  await page.evaluate(() => window.jlbIde.settings.set('editor.problemsAllFiles', true));
+});
+
+test('suggests table entries and shows a command\'s inputs while typing', async () => {
+  await page.evaluate(() => window.jlbIde.workspace.newFile(''));
+  await setText('hero = [name: "Ann", hp: 10]\nhero.level = 2\nFUNC add(a, b) {\n    RETURN a + b\n}\n');
+  await page.click('.cm-content');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('PRINT(hero.');
+  await page.keyboard.type('h');
+  await page.waitForSelector('.cm-tooltip-autocomplete');
+  assert.match(await page.locator('.cm-tooltip-autocomplete').innerText(), /hp/);
+  await page.keyboard.press('Escape');
+  assert.match(await page.locator('.jlb-hint').innerText(), /PRINT\(a, b, \.\.\.\)/);
+  await page.keyboard.type('p, ');
+  assert.equal(await page.locator('.jlb-hint .on').innerText(), 'b');
+  await page.keyboard.type('1)\nadd(1, ');
+  assert.match(await page.locator('.jlb-hint').innerText(), /^add\(a, b\)/);
+  assert.equal(await page.locator('.jlb-hint .on').innerText(), 'b');
+  await page.keyboard.type('2)');
+  assert.equal(await page.locator('.jlb-hint').count(), 0);
+});
+
+test('Quick-try answers INPUT, stops endless snippets, and loads a file', async () => {
+  await page.click('.panel-tab:has-text("Quick-try")');
+  const type = async (code) => {
+    await page.click('.qt-input .cm-content');
+    await page.keyboard.type(code);
+    await page.keyboard.press('Enter');
+  };
+  const settle = () => page.waitForFunction(() => !document.querySelector('.qt-result.pending'));
+  await type('who = INPUT("Who? ")');
+  await page.waitForSelector('.qt-answer');
+  await page.fill('.qt-answer', 'Ann');
+  await page.keyboard.press('Enter');
+  await settle();
+  await type('who');
+  await settle();
+  assert.match(await page.locator('.qt-log').innerText(), /"Ann"\s*TEXT/);
+
+  await page.evaluate(() => window.jlbIde.settings.set('quicktry.slowAfter', 1));
+  await type('WHILE TRUE { }');
+  await page.waitForSelector('.qt-result button:has-text("Stop")', { timeout: 4000 });
+  await page.click('.qt-result button:has-text("Stop")');
+  await settle();
+  assert.match(await page.locator('.qt-log').innerText(), /Stopped\. The variables were cleared\./);
+
+  await page.evaluate(() => window.jlbIde.workspace.newFile('FUNC double(n) {\n    RETURN n * 2\n}\n'));
+  await page.evaluate(() => window.jlbIde.commands.run('quicktry.loadFile'));
+  await settle();
+  await type('double(21)');
+  await settle();
+  assert.match(await page.locator('.qt-log').innerText(), /Loaded untitled-\d+\.jlb[\s\S]*double\(21\)\n42\s*NUMBER/);
+});
+
+test('installs a plugin from a folder, and reloads it when its files change', async () => {
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'jlb-ide-test-plugin-'));
+  fs.writeFileSync(path.join(src, 'plugin.json'), JSON.stringify({ id: 'hello-folder', name: 'Hello' }));
+  const main = (t) => `export function activate(api) { api.layout.addStatus(api.ui.h('span.status-item.hello-status', '${t}'), 'right'); }`;
+  fs.writeFileSync(path.join(src, 'main.js'), main('HELLO 1'));
+  await dialog(src);
+  await page.evaluate(() => window.jlbIde.commands.run('plugins.install'));
+  await page.waitForSelector('.hello-status:has-text("HELLO 1")');
+  assert.ok(fs.existsSync(path.join(config, 'plugins', 'hello-folder', 'main.js')));
+  await page.bringToFront();
+  fs.writeFileSync(path.join(config, 'plugins', 'hello-folder', 'main.js'), main('HELLO 2'));
+  await page.waitForSelector('.hello-status:has-text("HELLO 2")', { timeout: 8000 });
+  assert.equal(await page.locator('.hello-status').count(), 1);
 });
 
 test('no errors in the page', () => {

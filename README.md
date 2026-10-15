@@ -12,14 +12,16 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 
 ### Tools made for .jlb
 
-- **Live mistake checking.** Problems are underlined as you type, using the interpreter's own syntax check, with one-click fixes for its suggestions (`Print` → `PRINT`, `myScore` → `my_score`, `!=` → `!==`). It also warns about the .jlb slip-ups other editors can't know about:
+- **Live mistake checking.** Problems are underlined as you type, using the interpreter's own syntax check, with one-click fixes for its suggestions (`Print` → `PRINT`, `myScore` → `my_score`, `!=` → `!==`). Every mistake in the file is listed, not just the first, and the Problems panel covers all your open files. It also warns about the .jlb slip-ups other editors can't know about:
   - `x !== NULL && x.hp` crashes when `x` is NULL, because `&&` always checks both sides (the fix changes it to `&`).
   - `"apple" < "banana"` compares lengths, not alphabetical order.
   - A name that's never given a value, with a "did you mean" for typos (`scroe` → `score`).
+  - A name used where it doesn't exist: one that's only given a value inside another function, or a `FOR` or `FAIL` name used after its block.
+  - A variable or function used above the line that gives it a value (top-level code runs in order).
   - A `GOTO` with no matching `POINT`.
 - **Crash report viewer.** When a program crashes, a panel shows the error, the function calls and every variable's value in a table. The crashing line is marked in your code, and resting the mouse on a variable shows what it held when the program crashed.
 - **Quirk explainer.** Rest the mouse on any operator, command or keyword for a plain-English explanation: how `&` differs from `&&`, what `!%` and `!^` do, why `!=` is an error, what `0xFF` equals. Your own functions show their inputs, and which ones are shared with `@`.
-- **Quick-try console.** Type a bit of .jlb and see the result and its type right away: `"25" * 2` gives `"2525"` (TEXT). Variables carry over between snippets. Select code in the editor and press Ctrl+Enter to try it.
+- **Quick-try console.** Type a bit of .jlb and see the result and its type right away: `"25" * 2` gives `"2525"` (TEXT). Variables carry over between snippets, `INPUT` asks right in the panel, and a snippet stuck in a loop can be stopped. Select code in the editor and press Ctrl+Enter to try it, or load the whole file to try out its functions.
 - **Run with Rust or C.** Switch interpreters with one click in the toolbar. Programs that use `INPUT` work: type your answer in the Output panel.
 - **The language guide, built in.** The whole .jlb reference in the sidebar, searchable, with a button to open any example as a new file.
 
@@ -29,7 +31,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 
 ### Everyday editing
 
-Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands with their inputs, your own names, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), go to definition (F12 or Ctrl+click), an Outline of functions and `POINT`s, find and replace, a command palette, a Monokai color theme (night and day versions), and your folder and files reopened where you left them.
+Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions and `POINT`s, find and replace, a command palette, a Monokai color theme (night and day versions), and your folder and files reopened where you left them.
 
 ### Settings for everything
 
@@ -39,7 +41,7 @@ Every feature can be switched off, and most have their own options: Settings (Ct
 
 ### Plugins
 
-Anyone can add features with a plugin: a folder with a `plugin.json` and a `main.js`. Plugins can add commands, panels, sidebar views, mistake checks, hover info, suggestions, settings, and even more interpreters. The built-in features are plugins themselves, built on the same API. **Plugins → Create a plugin** writes a working example to start from, and [docs/plugins.md](docs/plugins.md) describes everything a plugin can do.
+Anyone can add features with a plugin: a folder with a `plugin.json` and a `main.js`. Plugins can add commands, panels, sidebar views, mistake checks, hover info, suggestions, settings, and even more interpreters. The built-in features are plugins themselves, built on the same API. **Plugins → Create a plugin** writes a working example to start from (it reloads by itself as you edit it), **Install from a folder** adds someone else's, and [docs/plugins.md](docs/plugins.md) describes everything a plugin can do.
 
 ## Good to know
 

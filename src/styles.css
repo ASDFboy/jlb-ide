@@ -791,6 +791,32 @@ kbd,
   max-width: 440px;
 }
 
+/* a command's inputs, shown while typing them */
+.jlb-hint {
+  padding: 5px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 460px;
+}
+
+.jlb-hint .on {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline 2px var(--amber);
+  text-underline-offset: 3px;
+}
+
+.jlb-hint .desc {
+  display: block;
+  margin-top: 3px;
+  font-family: 'Atkinson Hyperlegible', sans-serif;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--faint);
+  white-space: normal;
+}
+
 .hover-card {
   padding: 10px 12px;
   font-family: 'Atkinson Hyperlegible', sans-serif;
@@ -1667,6 +1693,26 @@ select.input {
   white-space: nowrap;
 }
 
+.problem-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 2px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.problem-file:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.problem-file .count {
+  font-weight: 400;
+  color: var(--faint);
+}
+
 /* crash */
 .crash {
   padding: 10px 14px 20px;
@@ -1856,6 +1902,32 @@ select.input {
 .qt-entry.err .qt-result {
   color: var(--rose);
   font-family: 'Atkinson Hyperlegible', sans-serif;
+}
+
+.qt-label {
+  color: var(--muted);
+  font-family: 'Atkinson Hyperlegible', sans-serif;
+  font-weight: 700;
+}
+
+.qt-ask,
+.qt-answered {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.qt-prompt {
+  color: var(--text);
+  white-space: pre;
+}
+
+.qt-answer {
+  flex: 1;
+  max-width: 360px;
+  height: 26px;
+  font: 13px 'JetBrains Mono', monospace;
 }
 
 .qt-note {

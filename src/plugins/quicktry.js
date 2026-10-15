@@ -14,6 +14,7 @@ export default {
   settings: [
     { key: 'showTypes', title: 'Show each result\'s type', type: 'boolean', default: true },
     { key: 'keepHistory', title: 'Remember what you typed between sessions', description: 'Press ↑ in the input to bring back earlier snippets.', type: 'boolean', default: true },
+    { key: 'slowAfter', title: 'Offer to stop a snippet after this many seconds', description: 'A snippet stuck in an endless loop never finishes; this shows a Stop button for it.', type: 'number', default: 5, min: 1, max: 120 },
     { key: 'history', type: 'text', default: '[]', hidden: true },
   ],
   activate(api) {
@@ -40,7 +41,8 @@ export default {
       log.scrollTop = log.scrollHeight;
     };
 
-    const run = async (code) => {
+    /** Runs a snippet; `label` replaces the code shown in the list (for a whole file). */
+    const run = async (code, { label } = {}) => {
       code = code.replace(/\s+$/, '');
       if (!code.trim() || busy) return;
       const it = interpreter();
@@ -49,17 +51,47 @@ export default {
         return;
       }
       busy = true;
-      past = [code, ...past.filter((p) => p !== code)].slice(0, 50);
-      if (api.settings.get('keepHistory')) api.settings.set('history', JSON.stringify(past));
+      if (!label) {
+        past = [code, ...past.filter((p) => p !== code)].slice(0, 50);
+        if (api.settings.get('keepHistory')) api.settings.set('history', JSON.stringify(past));
+      }
       back = -1;
-      const entry = h('div.qt-entry', h('pre.qt-code', code), h('div.qt-result.pending', 'Running…'));
+      const res = h('div.qt-result.pending', 'Running…');
+      const entry = h('div.qt-entry', label ? h('div.qt-label', label) : h('pre.qt-code', code), res);
       add(entry);
-      try {
-        const r = await api.invoke('repl_eval', { interpreter: it.path, cwd: api.workspace.folder || '', code });
-        const reply = JSON.parse(r.reply);
-        const res = entry.querySelector('.qt-result');
-        res.classList.remove('pending');
+      // A snippet that takes a while gets a Stop button (an endless loop never finishes on its own).
+      let stopped = false;
+      const slow = setTimeout(() => {
+        if (!res.classList.contains('pending')) return;
+        clear(res).append('Still running… ', h('button.link', {
+          on: {
+            click: async () => {
+              stopped = true;
+              await api.invoke('repl_reset');
+            },
+          },
+        }, 'Stop'));
+      }, api.settings.get('slowAfter') * 1000);
+      const show = (r) => {
         if (r.output) entry.insertBefore(h('pre.qt-output', r.output.replace(/\n$/, '')), res);
+      };
+      try {
+        let r = await api.invoke('repl_eval', { interpreter: it.path, cwd: sessionDir(), code });
+        let reply = JSON.parse(r.reply);
+        // INPUT: ask here, send the answer, and wait for what comes next.
+        while ('input' in reply) {
+          show(r);
+          const answer = await ask(entry, res, reply.input);
+          if (answer === null) {
+            stopped = true;
+            await api.invoke('repl_reset');
+            throw new Error('stop');
+          }
+          r = await api.invoke('repl_answer', { text: answer });
+          reply = JSON.parse(r.reply);
+        }
+        res.classList.remove('pending');
+        show(r);
         if (!reply.ok) {
           entry.classList.add('err');
           res.textContent = reply.error.message + (reply.error.traced && reply.error.line > 1 ? ` (line ${reply.error.line})` : '');
@@ -73,11 +105,46 @@ export default {
           if (!r.output) entry.classList.add('done');
         }
       } catch (e) {
+        res.classList.remove('pending');
         entry.classList.add('err');
-        entry.querySelector('.qt-result').textContent = String(e);
+        res.textContent = stopped ? 'Stopped. The variables were cleared.' : String(e?.message || e);
       }
+      clearTimeout(slow);
       busy = false;
       log.scrollTop = log.scrollHeight;
+    };
+
+    /** An answer box for INPUT, inside the snippet's entry. Resolves to the text, or null to stop. */
+    const ask = (entry, res, prompt) => new Promise((resolve) => {
+      const box = h('input.input.qt-answer', { placeholder: 'Type the answer and press Enter', spellcheck: false, 'aria-label': prompt || 'Answer for INPUT' });
+      const row = h('div.qt-ask', h('span.qt-prompt', prompt || 'INPUT'), box, h('button.link', { on: { click: () => done(null) } }, 'Stop'));
+      const done = (v) => {
+        row.remove();
+        if (v !== null) entry.insertBefore(h('div.qt-answered', h('span.qt-prompt', prompt), h('span.o-in', v)), res);
+        resolve(v);
+      };
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') done(box.value);
+        if (e.key === 'Escape') done(null);
+      });
+      clear(res).append('Waiting for an answer');
+      entry.insertBefore(row, res);
+      log.scrollTop = log.scrollHeight;
+      setTimeout(() => box.focus());
+    });
+
+    // Sessions run in the open folder (or the current file's folder), so READ and IMPORT find files.
+    const sessionDir = () => {
+      const doc = api.workspace.active;
+      return api.workspace.folder || (doc?.path ? doc.path.replace(/[\\/][^\\/]*$/, '') : '');
+    };
+
+    /** Runs the current file in the session, so its functions and variables can be tried out. */
+    const loadFile = () => {
+      const doc = api.workspace.active;
+      if (!doc) return api.ui.toast('Open a file to load it into Quick-try.');
+      api.layout.showPanel('quicktry', { focus: false });
+      setTimeout(() => run(api.workspace.textOf(doc), { label: `Loaded ${doc.name}` }), 0);
     };
 
     const reset = async () => {
@@ -92,6 +159,7 @@ export default {
       title: 'Quick-try',
       order: 40,
       actions: [
+        { icon: 'file', title: 'Load the current file (runs it, so you can try its functions)', run: loadFile },
         { icon: 'refresh', title: 'Clear variables', run: reset },
         { icon: 'trash', title: 'Clear the list', run: () => { clear(log); empty(); } },
       ],
@@ -148,10 +216,11 @@ export default {
       if (!log.childNodes.length) {
         log.append(h('div.qt-empty',
           h('p', 'Try a bit of .jlb and see the result and its type.'),
-          h('p.muted', 'Variables stay between snippets, so you can build things up step by step. Select code in the editor and press Ctrl+Enter to try it here.')));
+          h('p.muted', 'Variables stay between snippets, so you can build things up step by step. Select code in the editor and press Ctrl+Enter to try it here, or load the whole file (the page button above) to try out its functions.')));
       }
     };
 
+    api.commands.register({ id: 'quicktry.loadFile', title: 'Load the current file into Quick-try', run: loadFile });
     api.commands.register({
       id: 'quicktry.focus',
       title: 'Open Quick-try',

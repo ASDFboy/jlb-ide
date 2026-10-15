@@ -65,6 +65,77 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginFiles>, String> {
     Ok(out)
 }
 
+/// A cheap fingerprint of the plugins folder (names, sizes and change times of the
+/// files at the top of each plugin), so the IDE can notice edits without reading them.
+#[tauri::command]
+pub fn plugins_stamp(app: AppHandle) -> Result<String, String> {
+    let dir = PathBuf::from(plugins_dir(app)?);
+    let mut parts = Vec::new();
+    let Ok(rd) = std::fs::read_dir(&dir) else { return Ok(String::new()) };
+    for folder in rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
+        let Ok(files) = std::fs::read_dir(&folder) else { continue };
+        for f in files.filter_map(|e| e.ok()) {
+            let Ok(meta) = f.metadata() else { continue };
+            if !meta.is_file() {
+                continue;
+            }
+            let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis()).unwrap_or(0);
+            parts.push(format!("{}|{}|{}", f.path().to_string_lossy(), meta.len(), modified));
+        }
+    }
+    parts.sort();
+    Ok(parts.join("\n"))
+}
+
+fn copy_tree(from: &std::path::Path, to: &std::path::Path, depth: u32) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for e in std::fs::read_dir(from)? {
+        let e = e?;
+        let name = e.file_name();
+        let n = name.to_string_lossy();
+        // Development leftovers aren't part of the plugin.
+        if n == ".git" || n == "node_modules" {
+            continue;
+        }
+        let kind = e.file_type()?;
+        if kind.is_dir() {
+            if depth < 8 {
+                copy_tree(&e.path(), &to.join(&name), depth + 1)?;
+            }
+        } else if kind.is_file() {
+            std::fs::copy(e.path(), to.join(&name))?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies a plugin's folder into the plugins folder, named after its id. Gives back
+/// where it went. With `replace`, an installed plugin with the same id is replaced.
+#[tauri::command]
+pub fn install_plugin(app: AppHandle, from: String, replace: bool) -> Result<String, String> {
+    let src = PathBuf::from(&from);
+    let manifest = std::fs::read_to_string(src.join("plugin.json")).map_err(|_| "that folder has no plugin.json, so it isn't a plugin".to_string())?;
+    let parsed: serde_json::Value = serde_json::from_str(&manifest).map_err(|e| format!("plugin.json isn't valid JSON ({})", e))?;
+    let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let valid = !id.is_empty() && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') && !id.starts_with('-');
+    if !valid {
+        return Err(format!("\"{}\" in plugin.json isn't a valid plugin id (use lowercase letters, digits and dashes)", id));
+    }
+    let dir = PathBuf::from(plugins_dir(app)?);
+    let dest = dir.join(id);
+    if src.canonicalize().ok() == dest.canonicalize().ok() {
+        return Err("that plugin is already in the plugins folder".into());
+    }
+    if dest.exists() {
+        if !replace {
+            return Err(format!("already installed: {}", id));
+        }
+        std::fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
+    }
+    copy_tree(&src, &dest, 0).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 #[derive(Serialize)]
 pub struct Found {
     rust: Option<String>,
