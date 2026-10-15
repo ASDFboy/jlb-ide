@@ -1,7 +1,9 @@
 // Live mistake checking: the interpreter's own syntax check, plus warnings for
 // the .jlb quirks that trip people up.
 
-import { scan } from './scan.js';
+import { scan, loadName } from './scan.js';
+import { linked, dependents } from './linked.js';
+import { basename } from '../core/paths.js';
 
 export default {
   id: 'checker',
@@ -12,7 +14,8 @@ export default {
     { key: 'syntax', title: 'Check syntax with the interpreter', description: 'The same check that runs before a program starts.', type: 'boolean', default: true },
     { key: 'andOr', title: 'Warn when && or || would crash', description: 'In .jlb, & and | stop early but && and || always check both sides, so x !== NULL && x.hp crashes when x is NULL.', type: 'boolean', default: true },
     { key: 'textCompare', title: 'Note when text is compared with < or >', description: 'Text against text compares lengths, not alphabetical order.', type: 'boolean', default: true },
-    { key: 'undefined', title: 'Warn about names that are never given a value', description: 'Catches typos like PRINT(scroe). Skipped in files that use IMPORT or LOAD.', type: 'boolean', default: true },
+    { key: 'undefined', title: 'Warn about names that are never given a value', description: 'Catches typos like PRINT(scroe). Names from files brought in with IMPORT and LOAD count too.', type: 'boolean', default: true },
+    { key: 'imports', title: 'Warn when IMPORT or LOAD can\'t find its file', description: 'Also catches tool.nmae typos for tables made by LOAD.', type: 'boolean', default: true },
     { key: 'gotoPoint', title: 'Warn about GOTO with no matching POINT', type: 'boolean', default: true },
   ],
   activate(api) {
@@ -54,16 +57,37 @@ export default {
     api.language.addCheck({
       id: 'quirks',
       title: '.jlb tips',
-      check({ text }) {
+      async check({ text, path }) {
         const out = [];
         const info = scan(text);
         if (api.settings.get('andOr')) out.push(...andOrCrashes(info));
         if (api.settings.get('textCompare')) out.push(...textCompares(info));
         if (api.settings.get('gotoPoint')) out.push(...gotoPoints(info));
-        if (api.settings.get('undefined') && !info.usesImport) out.push(...undefinedNames(info));
+        const wantNames = api.settings.get('undefined');
+        const wantImports = api.settings.get('imports');
+        if (!wantNames && !wantImports) return out;
+        // Files brought in are found next to this one, so an unsaved new file can't follow them.
+        const link = path ? await linked(api, path, text, info) : null;
+        if (wantImports) out.push(...importProblems(info, link));
+        // Every IMPORT has to be followed to know which names exist.
+        const imports = info.imports.filter((i) => i.kind === 'IMPORT').length;
+        const followed = imports === (info.codeLines.join('\n').match(/\bIMPORT\b/g) || []).length;
+        const canFollow = imports === 0 || (link && followed && !link.missing.some((m) => m.kind === 'IMPORT'));
+        if (wantNames && canFollow) out.push(...undefinedNames(info, link));
         return out;
       },
     });
+
+    // A change to a file that others bring in changes what those files can use.
+    let timer = null;
+    const changed = (doc) => {
+      if (!doc?.path) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => dependents(api, doc.path).forEach((d) => api.language.recheck(d)), 500);
+    };
+    api.events.on('editor-change', () => changed(api.workspace.active));
+    api.events.on('file-save', changed);
+    api.onDispose(() => clearTimeout(timer));
   },
 };
 
@@ -128,16 +152,22 @@ function gotoPoints({ gotos, points }) {
 // names and the globals (no closures); outside, only globals. FOR and FAIL names
 // exist only inside their block. At the top level, a name must already have a value
 // when its line runs, so using it above the line that gives it one is a mistake too.
-function undefinedNames({ uses, defined, globals, funcs, loads, gotos, points, lineAt }) {
+function undefinedNames({ uses, defined, globals: own, funcs, loads, gotos, points, lineAt, imports }, link) {
   const out = [];
   const seen = new Set();
   const jumps = gotos.length > 0 || points.size > 0; // GOTO can run lines out of order
   const ownerOf = (name) => funcs.find((f) => f.locals.has(name) || paramNames(f).includes(name));
+  // Names from IMPORT have a value from the IMPORT line on, like any other outside name.
+  const globals = new Map(own);
+  const imported = link?.names || new Map();
+  for (const [n, d] of imported) if (!(globals.get(n) <= d.importOff)) globals.set(n, d.importOff);
+  const outer = link?.outer || new Map();
+  const where = imports.length ? 'in this file or the files it brings in' : 'in this file';
   for (const u of uses) {
     const key = u.line + ':' + u.name;
     if (seen.has(key)) continue;
     const fn = u.func >= 0 ? funcs[u.func] : null;
-    const visible = u.blockNames.has(u.name) || globals.has(u.name) || loads.has(u.name)
+    const visible = u.blockNames.has(u.name) || globals.has(u.name) || loads.has(u.name) || outer.has(u.name)
       || (fn && (fn.locals.has(u.name) || paramNames(fn).includes(u.name)));
     if (!visible) {
       seen.add(key);
@@ -157,36 +187,73 @@ function undefinedNames({ uses, defined, globals, funcs, loads, gotos, points, l
         });
         continue;
       }
-      const close = [...visibleNames(u, fn, globals, loads)].filter((d) => near(d, u.name)).slice(0, 2);
+      const close = [...visibleNames(u, fn, globals, loads, outer)].filter((d) => near(d, u.name)).slice(0, 2);
       out.push({
         line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
-        message: `${u.name} is never given a value in this file${close.length ? `. Did you mean ${close.join(' or ')}?` : '.'}`,
+        message: `${u.name} is never given a value ${where}${close.length ? `. Did you mean ${close.join(' or ')}?` : '.'}`,
         fix: close.length ? close.map((c) => ({ label: `Change to ${c}`, text: c })) : undefined,
       });
       continue;
     }
     // Top-level code runs in order, so a value given further down isn't there yet.
-    if (!fn && !jumps && u.depth === 0 && !u.blockNames.has(u.name) && !loads.has(u.name) && globals.get(u.name) >= u.off) {
+    if (!fn && !jumps && u.depth === 0 && !u.blockNames.has(u.name) && !loads.has(u.name) && !outer.has(u.name) && globals.get(u.name) >= u.off) {
       seen.add(key);
       const at = lineAt(globals.get(u.name));
-      const isFunc = funcs.some((f) => f.name === u.name && f.inFunc < 0);
+      const fromImport = imported.has(u.name) && globals.get(u.name) === imported.get(u.name).importOff;
+      const isFunc = fromImport ? imported.get(u.name).kind === 'func' : funcs.some((f) => f.name === u.name && f.inFunc < 0);
       out.push({
         line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
-        message: isFunc
-          ? `${u.name}() is used before its FUNC line has run (line ${at}). Move the FUNC above this line.`
-          : globals.get(u.name) === u.off
-            ? `${u.name} has no value yet, so it can't be changed here. Give it a starting value first, like ${u.name} = 0.`
-            : `${u.name} is used before it's given a value (line ${at} gives it one).`,
+        message: fromImport
+          ? `${u.name}${isFunc ? '()' : ''} comes from the IMPORT on line ${at}, which hasn't run yet here. Move the IMPORT above this line.`
+          : isFunc
+            ? `${u.name}() is used before its FUNC line has run (line ${at}). Move the FUNC above this line.`
+            : globals.get(u.name) === u.off
+              ? `${u.name} has no value yet, so it can't be changed here. Give it a starting value first, like ${u.name} = 0.`
+              : `${u.name} is used before it's given a value (line ${at} gives it one).`,
       });
     }
   }
   return out;
 }
 
+// IMPORT and LOAD files that aren't there, LOAD names that can't be made, and
+// tool.name for a LOAD table that has no such name.
+function importProblems(info, link) {
+  const out = [];
+  for (const imp of info.imports) {
+    const span = { line: imp.line, col: imp.col, endCol: imp.endCol };
+    if (imp.kind === 'LOAD' && !/^[a-z_][a-z0-9_]*$/.test(loadName(imp.file))) {
+      out.push({ ...span, severity: 'warning', message: `LOAD names its table after the file, and "${loadName(imp.file)}" can't be a name. Rename the file to use only letters, numbers, _ and -, starting with a letter.` });
+    }
+    const miss = link?.missing.find((m) => m.off === imp.off);
+    if (miss) {
+      out.push({ ...span, severity: 'warning', message: `Can't find ${imp.file}: there's no ${miss.path}. ${imp.kind} paths start from this file's folder.` });
+    }
+  }
+  if (!link) return out;
+  const code = info.codeLines.join('\n');
+  info.codeLines.forEach((line, i) => {
+    for (const m of line.matchAll(/(?<![\w.])([a-z_][a-z0-9_]*)\s*\.\s*([a-z_][a-z0-9_]*)/g)) {
+      const load = link.loads.get(m[1]);
+      if (!load?.names || load.names.has(m[2]) || info.globals.has(m[1]) || (!info.loads.has(m[1]) && !link.names.has(m[1]))) continue;
+      // The program can add its own entries to the table.
+      if (new RegExp(`\\b${m[1]}\\s*\\.\\s*${m[2]}\\s*(=|@=|[-+*/^%]=)(?!=)`).test(code)) continue;
+      const col = m.index + m[0].length - m[2].length + 1;
+      const close = [...load.names.keys()].filter((n) => near(n, m[2])).slice(0, 2);
+      out.push({
+        line: i + 1, col, endCol: col + m[2].length, severity: 'warning',
+        message: `${basename(load.path)} has no ${m[2]}, so ${m[1]}.${m[2]} is NULL${close.length ? `. Did you mean ${close.join(' or ')}?` : '.'}`,
+        fix: close.length ? close.map((c) => ({ label: `Change to ${c}`, text: c })) : undefined,
+      });
+    }
+  });
+  return out;
+}
+
 const paramNames = (f) => f.params.map((p) => p.replace(/^(@|\.\.\.)/, ''));
 
-function visibleNames(u, fn, globals, loads) {
-  const names = new Set([...u.blockNames, ...globals.keys(), ...loads]);
+function visibleNames(u, fn, globals, loads, outer) {
+  const names = new Set([...u.blockNames, ...globals.keys(), ...loads, ...outer.keys()]);
   if (fn) for (const n of [...fn.locals, ...paramNames(fn)]) names.add(n);
   return names;
 }

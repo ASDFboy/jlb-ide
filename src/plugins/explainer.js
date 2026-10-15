@@ -2,6 +2,8 @@
 // plain-English explanation, focused on what's different in .jlb.
 
 import { scan } from './scan.js';
+import { peek, describe } from './linked.js';
+import { basename } from '../core/paths.js';
 
 const DOC_FOR_OP = (op) => (/^[&|~!]/.test(op) && !op.startsWith('!=') && !op.startsWith('!^') && !op.startsWith('!%') ? 'logic' : /[<>=]/.test(op) ? 'comparisons' : 'operators');
 
@@ -54,13 +56,29 @@ export default {
         return { title: `${full[0]} is ${v}`, code: true };
       }
       if (/^[a-z_][a-z0-9_]*$/.test(w) && api.settings.get('functions')) {
-        const f = info(state).funcs.find((x) => x.name === w);
-        if (f) {
-          const shared = f.params.filter((p) => p.startsWith('@'));
+        const own = info(state);
+        const link = peek(api.workspace.active?.path);
+        const owner = line.text.slice(0, word.from - line.from).match(/(?<![\w.])([a-z_][a-z0-9_]*)\s*\.\s*$/)?.[1];
+        if (owner) {
+          // tool.name, for a table made by LOAD.
+          const d = link?.loads.get(owner)?.names?.get(w);
+          return d?.kind === 'func' ? funcHover(w, d.params, `From ${describe(d)}`) : null;
+        }
+        const f = own.funcs.find((x) => x.name === w);
+        if (f) return funcHover(w, f.params, `Defined on line ${f.line}`);
+        if (own.globals.has(w)) return null;
+        const d = link?.names.get(w) || link?.outer.get(w);
+        if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`);
+        const load = link?.loads.get(w);
+        if (load && (own.loads.has(w) || d?.kind === 'load')) {
+          const names = load.names ? [...load.names.values()] : null;
+          const fns = names?.filter((n) => n.kind === 'func').map((n) => n.name) || [];
           return {
-            title: `FUNC ${w}(${f.params.join(', ')})`,
-            subtitle: `Defined on line ${f.line}`,
-            body: shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).',
+            title: w,
+            subtitle: `The table LOAD makes from ${basename(load.path)}`,
+            body: !names ? 'That file can\'t be found.'
+              : names.length ? `It holds that file's outside names as they were when it loaded${fns.length ? `, including ${list(fns.map((n) => `${w}.${n}()`))}` : ''}.`
+                : 'That file gives no outside names.',
           };
         }
       }
@@ -68,6 +86,21 @@ export default {
     });
   },
 };
+
+function funcHover(name, params, subtitle) {
+  const shared = params.filter((p) => p.startsWith('@'));
+  return {
+    title: `FUNC ${name}(${params.join(', ')})`,
+    subtitle,
+    body: shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).',
+  };
+}
+
+/** "a, b and 3 more" */
+function list(items, max = 4) {
+  if (items.length > max) return `${items.slice(0, max).join(', ')} and ${items.length - max} more`;
+  return items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items.at(-1)}` : items[0];
+}
 
 function stripStrings(s) {
   return s.replace(/"[^"]*"|'(?:\\.|[^'\\])*'/g, '""');

@@ -44,6 +44,12 @@ export function strip(text) {
   return { noComments, code };
 }
 
+/** The name LOAD gives a file's table: "My-Tools.jlb" → my_tools. */
+export function loadName(file) {
+  // Like the interpreter: the file name without its extension, lowercase, - and space as _.
+  return String(file).split(/[\\/]/).pop().replace(/(.)\.[^.]*$/, '$1').toLowerCase().replace(/[- ]/g, '_');
+}
+
 export function scan(text) {
   const { noComments, code } = strip(text);
   const starts = [0];
@@ -212,13 +218,20 @@ export function scan(text) {
     if (COMPOUND.has(next)) giveValue(t, off);
   }
 
-  // LOAD "My-Tools.jlb" gives a table called my_tools.
+  // IMPORT "helpers.jlb" and LOAD "My-Tools.jlb" (LOAD gives a table called my_tools).
+  const imports = [];
   const loads = new Set();
-  for (const m of noComments.matchAll(/\bLOAD\s+["']([^"']+)["']/g)) {
-    const base = m[1].split(/[\\/]/).pop().replace(/\.jlb$/i, '');
-    const name = base.toLowerCase().replace(/[-\s]+/g, '_');
-    define(name, m.index);
-    loads.add(name);
+  for (const m of noComments.matchAll(/\b(IMPORT|LOAD)\s+(?:"([^"\n]*)"|'((?:\\.|[^'\\\n])*)')/g)) {
+    if (!code.startsWith(m[1], m.index)) continue; // inside text, not code
+    const raw = m[2] ?? m[3];
+    const file = m[2] !== undefined ? raw : raw.replace(/\\(.)/g, '$1');
+    const at = where(m.index + m[0].length - raw.length - 2);
+    imports.push({ kind: m[1], file, off: m.index, line: at.line, col: at.col, endCol: at.col + raw.length + 2 });
+    if (m[1] === 'LOAD' && isName(loadName(file))) {
+      const name = loadName(file);
+      define(name, m.index);
+      loads.add(name);
+    }
   }
 
   return {
@@ -226,7 +239,9 @@ export function scan(text) {
     globals,
     fields,
     loads,
+    imports,
     lineAt: (off) => where(off).line,
+    at: where,
     points,
     gotos,
     defined,

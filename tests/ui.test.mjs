@@ -780,6 +780,99 @@ test('the test runner finds tests, runs them with both interpreters, and saves n
   assert.equal(fs.readFileSync(path.join(dir, 'not-a-test.out'), 'utf8'), '1\n');
 });
 
+const activeLine = () => page.evaluate(() => {
+  const s = window.jlbIde.editor.view.state;
+  return s.doc.lineAt(s.selection.main.head).number;
+});
+const activeName = () => page.evaluate(() => window.jlbIde.workspace.active.name);
+
+test('follows IMPORT and LOAD: names, missing files, go to definition, hover and suggestions', async () => {
+  const dir = path.join(proj, 'linked');
+  fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'lib', 'helpers.jlb'), 'greeting = "hi"\nFUNC greet(name) {\n    RETURN greeting + " " + name + who_am_i\n}\nIMPORT "deep.jlb"\n');
+  fs.writeFileSync(path.join(dir, 'lib', 'deep.jlb'), 'FUNC deep_one() {\n    RETURN 1\n}\n');
+  fs.writeFileSync(path.join(dir, 'My-Tools.jlb'), 'FUNC double(n) {\n    RETURN n * 2\n}\nlimit = 10\n');
+  const main = 'PRINT(greet("Ann"))\nwho_am_i = "!"\nIMPORT "lib/helpers.jlb"\nPRINT(greet(greeting))\nPRINT(deep_one())\nLOAD "My-Tools.jlb"\nPRINT(my_tools.double(2))\nPRINT(my_tools.dubble(2))\nPRINT(nope)\n';
+  fs.writeFileSync(path.join(dir, 'main.jlb'), main);
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(dir, 'main.jlb'));
+  await page.waitForSelector('.tab.active:has-text("main.jlb")');
+  let p = await problems();
+  assert.match(p, /greet\(\) comes from the IMPORT on line 3, which hasn't run yet here/);
+  assert.match(p, /My-Tools\.jlb has no dubble, so my_tools\.dubble is NULL\. Did you mean double\?/);
+  assert.match(p, /nope is never given a value in this file or the files it brings in/);
+  assert.doesNotMatch(p, /(greeting|deep_one|who_am_i|my_tools) is never given/);
+
+  // Go to definition opens the other file at the right line.
+  await page.click('.cm-content');
+  let c = await coords(5, 'deep_one');
+  await page.mouse.click(c.x + 4, c.y);
+  await page.keyboard.press('F12');
+  await page.waitForSelector('.tab.active:has-text("deep.jlb")');
+  assert.equal(await activeLine(), 1);
+  await page.click('.tab:has-text("main.jlb")');
+  c = await coords(7, 'double');
+  await page.mouse.click(c.x + 4, c.y);
+  await page.keyboard.press('F12');
+  await page.waitForSelector('.tab.active:has-text("My-Tools.jlb")');
+  assert.equal(await activeLine(), 1);
+  // Ctrl+click on the file name opens it.
+  await page.click('.tab:has-text("main.jlb")');
+  c = await coords(3, 'helpers');
+  await page.keyboard.down('Control');
+  await page.mouse.click(c.x + 4, c.y);
+  await page.keyboard.up('Control');
+  await page.waitForSelector('.tab.active:has-text("helpers.jlb")');
+  // who_am_i comes from main.jlb, which IMPORTs this file.
+  assert.doesNotMatch(await problems(), /who_am_i is never given/);
+
+  // Hover and suggestions know the imported functions.
+  await page.click('.tab:has-text("main.jlb")');
+  const hover = await hoverText(4, 'greet');
+  assert.match(hover, /FUNC greet\(name\)/);
+  assert.match(hover, /From helpers\.jlb, line 2/);
+  await page.click('.cm-content');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('my_tools.');
+  await page.keyboard.press('Control+Space');
+  await page.waitForSelector('.cm-tooltip-autocomplete');
+  const sugg = await page.locator('.cm-tooltip-autocomplete').innerText();
+  assert.match(sugg, /double/);
+  assert.match(sugg, /limit/);
+  await page.keyboard.press('Escape');
+  await page.keyboard.type('double(');
+  assert.match(await page.locator('.jlb-hint').innerText(), /^my_tools\.double\(n\)/);
+
+  // Changing the imported file updates the problems of the file that imports it.
+  await setText(main);
+  await page.click('.tab:has-text("helpers.jlb")');
+  await page.evaluate(() => {
+    const v = window.jlbIde.editor.view;
+    const at = v.state.doc.toString().indexOf('greet(');
+    v.dispatch({ changes: { from: at, to: at + 5, insert: 'welcome' } });
+  });
+  await page.waitForTimeout(800);
+  p = await problems();
+  assert.match(p, /greet is never given a value in this file or the files it brings in/);
+  await page.evaluate(() => window.jlbIde.editor.view.dispatch({ changes: { from: 0, to: window.jlbIde.editor.view.state.doc.length, insert: '' } }));
+
+  // A missing file is pointed out, and names are no longer guessed at.
+  await page.click('.tab:has-text("main.jlb")');
+  await setText('IMPORT "missing.jlb"\nPRINT(anything)\n');
+  p = await problems();
+  assert.match(p, /Can't find missing\.jlb: there's no .*missing\.jlb\. IMPORT paths start from this file's folder/);
+  assert.doesNotMatch(p, /anything is never given/);
+  assert.equal(await activeName(), 'main.jlb');
+
+  // The Outline lists what the file brings in; clicking one opens it.
+  await setText('IMPORT "missing.jlb"\nLOAD "My-Tools.jlb"\n');
+  await page.evaluate(() => window.jlbIde.layout.showView('outline'));
+  await page.waitForSelector('.outline-item.import.missing');
+  assert.equal(await page.locator('.outline-item.load .outline-label').innerText(), 'My-Tools.jlb → my_tools');
+  await page.click('.outline-item.load');
+  await page.waitForSelector('.tab.active:has-text("My-Tools.jlb")');
+  await page.evaluate(() => window.jlbIde.layout.showView('explorer'));
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

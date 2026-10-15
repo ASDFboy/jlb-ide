@@ -165,6 +165,8 @@ api.language.addCheck({
 });
 ```
 
+**`recheck(file)`** runs the checks again on an open file (the one on screen if none is given), for when something it depends on changed, like another file.
+
 A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` count from 1; without `col` the whole line is marked. `severity` is `"error"`, `"warning"` or `"info"`. `fix` is an optional one-click fix that replaces the marked text: `{ label: 'Change to &', text: '&' }` (or a list of them).
 
 **`addHover(provider)`** adds info shown when the mouse rests on code. `provider(ctx)` gets `{ word, op, line, pos, state }`, where `word` and `op` are the word or operator under the mouse (`{ text, from, to }`, or `null`). It gives back `null` to pass, or:

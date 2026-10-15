@@ -161,6 +161,9 @@ export class Workspace {
     if (this.active && this.active !== doc && this.docs.includes(this.active)) this.active.state = this.ide.editor.view.state;
     this.active = doc;
     if (doc) {
+      // Finish any layout work the old file asked for first (like placing a tooltip),
+      // or it would run against the new file's text.
+      if (this.ide.editor.view.measureScheduled > -1) this.ide.editor.view.measure();
       this.ide.editor.view.setState(doc.state);
       this.ide.editor.refreshConfig();
       this.ide.editor.focus();

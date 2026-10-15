@@ -19,6 +19,8 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
   - A name used where it doesn't exist: one that's only given a value inside another function, or a `FOR` or `FAIL` name used after its block.
   - A variable or function used above the line that gives it a value (top-level code runs in order).
   - A `GOTO` with no matching `POINT`.
+  - An `IMPORT` or `LOAD` whose file isn't there, and `tools.nmae` when the file `LOAD` brought in has no `nmae`.
+- **Knows your other files.** Names that come from `IMPORT` and `LOAD` count as given a value (from the `IMPORT` line on), so there are no false warnings for them. Go to definition opens the file a function comes from, Ctrl+click on the file name of an `IMPORT` opens it, hover info shows "From helpers.jlb, line 2", and after `tools.` the suggestions are what `tools.jlb` defines. A file that's imported can use the outside names of the open file that imports it. Unsaved changes in open tabs count right away.
 - **Step-by-step debugger.** Click left of a line number to set a breakpoint, then Run: the program stops there. Step through it line by line (into and out of functions), and see every variable in the Debug view, with tables opening up to show what's inside and the values that just changed standing out. Rest the mouse on a name to see its value, and watch expressions like `hero.hp * 2`. Pause stops a loop that never ends, and an error stops the program before it ends, so you can see why.
 - **Table viewer.** Open any table as a grid, from the Debug view, a crash report or Quick-try. A list of tables (like a list of players) gets a column for each name, and you can sort by a column, filter, open the tables inside, and copy it all for a spreadsheet.
 - **Crash report viewer.** When a program crashes, a panel shows the error, the function calls and every variable's value in a table. The crashing line is marked in your code, and resting the mouse on a variable shows what it held when the program crashed.
@@ -33,13 +35,15 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 
 ![The Tests panel: tests run with both interpreters, and what a failing one printed](docs/images/tests.png)
 
+![A function from a LOADed file on hover, a missing IMPORT and a typo in a LOAD table's name, with the imports in the Outline](docs/images/imports.png)
+
 ![Warnings for .jlb slip-ups, with a one-click fix](docs/images/checks.png)
 
 ![The Quick-try console showing results and their types](docs/images/quicktry.png)
 
 ### Everyday editing
 
-Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions and `POINT`s, find and replace, a command palette, a Monokai color theme (night and day versions), your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
+Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions, `POINT`s and the files brought in, find and replace, a command palette, a Monokai color theme (night and day versions), your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
 
 ### Settings for everything
 
@@ -141,7 +145,7 @@ Then open <http://127.0.0.1:5180>. `npm run dev:web` rebuilds on every change. T
 
 ### Tests
 
-`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
+`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
 
 ## How it works
 
