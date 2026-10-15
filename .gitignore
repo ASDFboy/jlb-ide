@@ -1,0 +1,7 @@
+/node_modules
+/dist
+/src-tauri/target
+/src-tauri/gen/schemas
+/tests/screens
+/src-tauri/interpreters/*
+!/src-tauri/interpreters/README.txt
