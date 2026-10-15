@@ -1058,6 +1058,36 @@ test('folds blocks, tables and comments, and colors brackets by depth', async ()
   await page.waitForSelector('.cm-foldGutter');
 });
 
+test('formats a file, the selected lines, and on save when asked', async () => {
+  const file = path.join(proj, 'messy.jlb');
+  fs.writeFileSync(file, 'x=1\nFUNC f( a ){\nRETURN a*2}\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.waitForSelector('.tab.active:has-text("messy.jlb")');
+  await cursorOn(3, 'a*2');
+  await page.keyboard.press('Shift+Alt+F');
+  assert.equal(await tabText('messy.jlb'), 'x = 1\nFUNC f(a) {\n    RETURN a * 2 }\n');
+  // The cursor stays on the same code, and one Ctrl+Z undoes it.
+  assert.equal(await editorLine(), 3);
+  await page.keyboard.press('Control+z');
+  assert.equal(await tabText('messy.jlb'), 'x=1\nFUNC f( a ){\nRETURN a*2}\n');
+  // Just the selected lines.
+  await page.evaluate(() => {
+    const v = window.jlbIde.editor.view;
+    v.dispatch({ selection: { anchor: v.state.doc.line(2).from, head: v.state.doc.line(2).to } });
+  });
+  await page.keyboard.press('Shift+Alt+F');
+  assert.equal(await tabText('messy.jlb'), 'x=1\nFUNC f(a) {\nRETURN a*2}\n');
+  await page.keyboard.press('Shift+Alt+F');
+  await page.waitForSelector('.toast:has-text("Already tidy")');
+  // Format on save.
+  await page.evaluate(() => window.jlbIde.settings.set('format.onSave', true));
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction((p) => window.jlbIde.workspace.docs.find((d) => d.path === p) && !window.jlbIde.workspace.isDirty(window.jlbIde.workspace.docs.find((d) => d.path === p)), file);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'x = 1\nFUNC f(a) {\n    RETURN a * 2 }\n');
+  assert.equal(await tabText('messy.jlb'), 'x = 1\nFUNC f(a) {\n    RETURN a * 2 }\n');
+  await page.evaluate(() => window.jlbIde.settings.set('format.onSave', false));
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

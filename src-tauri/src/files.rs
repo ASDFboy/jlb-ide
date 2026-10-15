@@ -187,3 +187,32 @@ pub fn read_texts(paths: Vec<String>, max_bytes: Option<u64>) -> Vec<Option<Stri
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lists_and_reads_files() {
+        let dir = std::env::temp_dir().join(format!("jlb-ide-files-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for d in ["lib", ".hidden", "node_modules"] {
+            std::fs::create_dir_all(dir.join(d)).unwrap();
+        }
+        std::fs::write(dir.join("a.jlb"), "PRINT(1)\n").unwrap();
+        std::fs::write(dir.join("lib/b.jlb"), "x = 2\n").unwrap();
+        std::fs::write(dir.join(".hidden/c.jlb"), "").unwrap();
+        std::fs::write(dir.join("node_modules/d.js"), "").unwrap();
+        std::fs::write(dir.join("bin.dat"), [0u8, 1, 2]).unwrap();
+        let root = dir.to_string_lossy().into_owned();
+        let list = list_files(root.clone(), None).unwrap();
+        let names: Vec<String> = list.files.iter().map(|f| f.path[root.len() + 1..].replace('\\', "/")).collect();
+        assert_eq!(names, ["a.jlb", "bin.dat", "lib/b.jlb"]);
+        assert!(!list.truncated);
+        assert!(list_files(root.clone(), Some(2)).unwrap().truncated);
+        let texts = read_texts(list.files.iter().map(|f| f.path.clone()).collect(), None);
+        assert_eq!(texts, [Some("PRINT(1)\n".to_string()), None, Some("x = 2\n".to_string())]);
+        assert_eq!(read_texts(vec![dir.join("a.jlb").to_string_lossy().into_owned()], Some(3)), [None]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

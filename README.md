@@ -21,6 +21,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
   - A `GOTO` with no matching `POINT`.
   - An `IMPORT` or `LOAD` whose file isn't there, and `tools.nmae` when the file `LOAD` brought in has no `nmae`.
 - **Find in files and rename everywhere.** Ctrl+Shift+F searches every file in the folder (and unsaved changes in open tabs), with match case, whole word and pattern options and a filter like `*.jlb`; each result opens the file at the match. Replace shows what each match becomes before you replace them all (with `$1` from a pattern), and one click undoes it. F2 on a name renames it everywhere it means the same thing: a function's own local stays inside that function, while an outside name changes in every file joined by `IMPORT` and as `tools.name` in files that `LOAD` it. A name that's already taken or isn't allowed (`myScore`) is caught first.
+- **Formatter.** Alt+Shift+F tidies spacing and indentation the same way every time (`x=1+2` → `x = 1 + 2`, `PRINT ( a,b )` → `PRINT(a, b)`, blocks indented), for the whole file or just the selected lines, and optionally on every save. It never changes what the code does: lines stay where they are, text in quotes and comments are left exactly as written, and every line is checked to have the same pieces afterwards.
 - **Knows your other files.** Names that come from `IMPORT` and `LOAD` count as given a value (from the `IMPORT` line on), so there are no false warnings for them. Go to definition opens the file a function comes from, Ctrl+click on the file name of an `IMPORT` opens it, hover info shows "From helpers.jlb, line 2", and after `tools.` the suggestions are what `tools.jlb` defines. A file that's imported can use the outside names of the open file that imports it. Unsaved changes in open tabs count right away.
 - **Step-by-step debugger.** Click left of a line number to set a breakpoint, then Run: the program stops there. Step through it line by line (into and out of functions), and see every variable in the Debug view, with tables opening up to show what's inside and the values that just changed standing out. Rest the mouse on a name to see its value, and watch expressions like `hero.hp * 2`. Pause stops a loop that never ends, and an error stops the program before it ends, so you can see why.
 - **Table viewer.** Open any table as a grid, from the Debug view, a crash report or Quick-try. A list of tables (like a list of players) gets a column for each name, and you can sort by a column, filter, open the tables inside, and copy it all for a spreadsheet.
@@ -110,6 +111,7 @@ In **Settings → Files**, **Edit .jlb files with JLB IDE** adds **Edit with JLB
 | Ctrl+F | find and replace in this file |
 | Ctrl+Shift+F, Ctrl+Shift+H | find in all files, replace in all files |
 | F2 | rename the name under the cursor everywhere |
+| Alt+Shift+F | format the file (or the selected lines) |
 | Ctrl+Shift+[, Ctrl+Shift+] | fold the block the cursor is in, unfold it |
 | Ctrl+Alt+[, Ctrl+Alt+] | fold everything, unfold everything |
 | Ctrl+/ | comment or uncomment lines with `>>` |
@@ -152,7 +154,7 @@ Then open <http://127.0.0.1:5180>. `npm run dev:web` rebuilds on every change. T
 
 ### Tests
 
-`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, find in files, renaming, folding and bracket colors, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
+`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, find in files, renaming, folding and bracket colors, formatting, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
 
 ## How it works
 
