@@ -1,0 +1,156 @@
+// Crash report viewer: when a program stops with an error, shows the message,
+// the chain of function calls and every variable's value, and marks the line.
+
+export default {
+  id: 'crash',
+  name: 'Crash report viewer',
+  description: 'When a program crashes, shows the error, the function calls and every variable in a panel, and marks the line in your code.',
+  builtin: true,
+  settings: [
+    { key: 'autoShow', title: 'Open the Crash panel when a program crashes', type: 'boolean', default: true },
+    { key: 'markLine', title: 'Mark the crashing line in the editor', type: 'boolean', default: true },
+    { key: 'hoverValues', title: 'Show values from the crash when hovering a name', description: 'Rest the mouse on a variable to see what it held when the program crashed.', type: 'boolean', default: true },
+  ],
+  activate(api) {
+    const { h, clear, icon } = api.ui;
+    const { StateField, StateEffect } = api.cm.state;
+    const { Decoration, EditorView, WidgetType } = api.cm.view;
+    let last = null; // { report, doc }
+    let panelEl = null;
+
+    // ---------- the mark in the editor ----------
+    const setMark = StateEffect.define();
+    class Note extends WidgetType {
+      constructor(msg) {
+        super();
+        this.msg = msg;
+      }
+      eq(o) {
+        return o.msg === this.msg;
+      }
+      toDOM() {
+        return h('span.crash-note', this.msg);
+      }
+    }
+    const field = StateField.define({
+      create: () => Decoration.none,
+      update(deco, tr) {
+        for (const e of tr.effects) if (e.is(setMark)) deco = e.value;
+        // Editing the code means the old crash may no longer apply.
+        return tr.docChanged ? Decoration.none : deco;
+      },
+      provide: (f) => EditorView.decorations.from(f),
+    });
+    api.editor.addExtension(field);
+
+    const mark = () => {
+      const view = api.editor.view;
+      const doc = api.workspace.active;
+      let deco = Decoration.none;
+      if (last && api.settings.get('markLine') && sameFile(last, doc) && last.report.line <= view.state.doc.lines) {
+        const line = view.state.doc.line(last.report.line);
+        deco = Decoration.set([
+          Decoration.line({ class: 'cm-crash-line' }).range(line.from),
+          Decoration.widget({ widget: new Note(last.report.message), side: 1 }).range(line.to),
+        ]);
+      }
+      view.dispatch({ effects: setMark.of(deco) });
+    };
+    const sameFile = (c, doc) => doc && (c.doc === doc || c.report.file === doc.name);
+
+    api.events.on('crash', ({ report, doc }) => {
+      last = { report, doc };
+      render();
+      api.layout.setBadge('crash', '!', 'error');
+      if (api.settings.get('autoShow')) api.layout.showPanel('crash', { focus: false });
+      if (doc && api.workspace.active !== doc && report.file === doc.name) api.workspace.openFile(doc.path);
+      setTimeout(mark, 30);
+    });
+    api.events.on('run-start', () => {
+      api.layout.setBadge('crash', '');
+      api.editor.view.dispatch({ effects: setMark.of(Decoration.none) });
+    });
+    api.events.on('active-change', () => setTimeout(mark));
+    api.settings.onChange('markLine', mark);
+    api.onDispose(() => api.editor.view.dispatch({ effects: setMark.of(Decoration.none) }));
+
+    const goTo = async (line) => {
+      if (!last) return;
+      if (last.doc && last.report.file === last.doc.name && api.workspace.active !== last.doc) await api.workspace.openFile(last.doc.path);
+      else if (last.doc?.path && last.report.file !== last.doc.name) {
+        // The crash happened in an imported file next to the program.
+        const dir = last.doc.path.replace(/[\\/][^\\/]*$/, '');
+        const sep = last.doc.path.includes('\\') ? '\\' : '/';
+        await api.workspace.openFile(dir + sep + last.report.file);
+      }
+      api.editor.goTo(line, 1, { select: true });
+    };
+
+    // ---------- the panel ----------
+    let filter = '';
+    const render = () => {
+      if (!panelEl) return;
+      clear(panelEl);
+      if (!last) {
+        panelEl.append(h('div.empty-note', h('p', 'No crashes. When a program stops with an error, the report shows up here: the line, the function calls, and every variable.')));
+        return;
+      }
+      const r = last.report;
+      const groups = [...r.frames.map((f) => ({ title: `${f.name}()`, vars: f.vars })), { title: 'Outside functions', vars: r.outside }];
+      const search = h('input.input.crash-filter', { type: 'search', placeholder: 'Filter variables', value: filter, spellcheck: false, 'aria-label': 'Filter variables' });
+      const tables = h('div.crash-vars');
+      const fill = () => {
+        clear(tables);
+        const q = filter.toLowerCase();
+        for (const g of groups) {
+          const rows = g.vars.filter((v) => !q || v.name.includes(q) || v.value.toLowerCase().includes(q));
+          tables.append(h('div.var-group',
+            h('h4', g.title),
+            rows.length
+              ? h('table.var-table',
+                h('thead', h('tr', h('th', 'Name'), h('th', 'Value'), h('th', 'Type'))),
+                h('tbody', rows.map((v) => h('tr', h('td.var-name', v.name), h('td.var-value', h('code', v.value)), h('td.var-type', v.type)))))
+              : h('p.view-note', q ? 'No matches' : 'No variables')));
+        }
+      };
+      search.addEventListener('input', () => {
+        filter = search.value;
+        fill();
+      });
+      fill();
+      panelEl.append(
+        h('div.crash-head',
+          h('div.crash-msg', icon('alert', 18), h('span', r.message)),
+          h('button.link.crash-where', { on: { click: () => goTo(r.line) } }, `${r.file}, line ${r.line}`)),
+        r.frames.length ? h('div.crash-calls',
+          h('h4', 'Function calls (innermost first)'),
+          h('ol', r.frames.map((f) => h('li', h('button.link', { on: { click: () => goTo(f.line) } }, `${f.name}()`), h('span.muted', ` line ${f.line}`))))) : null,
+        r.traced ? h('div.crash-vars-wrap', search, tables) : h('p.view-note', 'This is a syntax error, so the program never started and there are no variables to show.'),
+      );
+    };
+    api.layout.addPanel({
+      id: 'crash',
+      title: 'Crash',
+      order: 30,
+      render: (el) => {
+        panelEl = el;
+        el.classList.add('crash');
+        render();
+      },
+    });
+
+    // ---------- values on hover ----------
+    api.language.addHover(({ word, op }) => {
+      if (!last || !word || op || !api.settings.get('hoverValues') || !sameFile(last, api.workspace.active)) return null;
+      if (!/^[a-z_][a-z0-9_]*$/.test(word.text)) return null;
+      const r = last.report;
+      for (const g of [...r.frames.map((f) => ({ where: `in ${f.name}()`, vars: f.vars })), { where: 'outside functions', vars: r.outside }]) {
+        const v = g.vars.find((x) => x.name === word.text);
+        if (v) return { title: `${v.name} = ${v.value}`, subtitle: `${v.type}, when the program crashed (${g.where})` };
+      }
+      return null;
+    });
+
+    api.commands.register({ id: 'crash.show', title: 'Show the last crash report', run: () => api.layout.showPanel('crash') });
+  },
+};

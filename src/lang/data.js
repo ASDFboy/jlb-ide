@@ -1,0 +1,143 @@
+// Everything the IDE knows about the .jlb language: words, commands and operators.
+// Used by highlighting, autocomplete and the quirk explainer. Plugins can add more
+// through ide.language (see docs/plugins.md).
+
+export const KEYWORDS = [
+  'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
+  'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
+];
+
+export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
+
+/** Built-in commands: how to call them, and what they do. */
+export const BUILTINS = {
+  PRINT: ['PRINT(a, b, ...)', 'Prints its inputs separated by spaces, then a new line. Text prints without quotes.'],
+  INPUT: ['INPUT([prompt])', 'Shows the prompt, waits for a typed line, and gives it back. It is always text, so use NUM() for numbers.'],
+  READ: ['READ(path)', 'The whole file as text.'],
+  READ_LINES: ['READ_LINES(path)', 'A table with one item per line of the file.'],
+  WRITE: ['WRITE(path, value)', "Replaces the file's contents, creating the file if it doesn't exist."],
+  EXISTS: ['EXISTS(path)', 'TRUE if the file or folder exists.'],
+  NUM: ['NUM(x)', 'Converts to a number: NUM("25") is 25, NUM("0xFF") is 255, NUM(TRUE) is 1, NUM(NULL) is 0. Text that is not a number is an error.'],
+  STR: ['STR(x)', 'The value as text, written the way PRINT shows it.'],
+  ENG: ['ENG(n)', 'Engineering notation: ENG(1500) is "1.5e3".'],
+  HEX: ['HEX(n)', 'Hex text for a whole number: HEX(255) is "0xFF".'],
+  TYPE: ['TYPE(x)', '"NUMBER", "TEXT", "BOOL", "NULL", "TABLE" or "FUNC".'],
+  LEN: ['LEN(x)', 'Numbered items in a table, characters in text, or characters in a number written out (LEN(-2.5) is 4).'],
+  ERROR: ['ERROR(message)', 'Raises an error with your message. TRY ... FAIL can catch it.'],
+  INSERT: ['INSERT(t, value, pos)', 'Puts value so it ends up at pos (negative counts from the end). Changes t, and also gives back the result. Works on text too.'],
+  DROP: ['DROP(t, pos)', 'Removes the item or character at pos. Changes t, and also gives back the result.'],
+  UNDEFINE: ['UNDEFINE(name)', 'Removes a variable, function, table or table entry completely.'],
+  KEYS: ['KEYS(t)', 'Positions, then names: KEYS(["a", name: 1]) is [1, "name"].'],
+  SORT: ['SORT(t)', 'A sorted copy, smallest first. Text sorts by length; use ALPHA_SORT for alphabetical. SORT(t) * -1 gives biggest first.'],
+  ALPHA_SORT: ['ALPHA_SORT(t)', 'A copy sorted alphabetically (capitals only break ties).'],
+  FIND: ['FIND(text or t, value, [depth])', 'Position (or name) of the first match, or NULL. With depth, also searches tables inside tables and gives a path.'],
+  SPLIT: ['SPLIT(text, sep)', 'Splits text into a table. "" as sep splits into characters.'],
+  JOIN: ['JOIN(t, [sep])', 'Joins the numbered items into text.'],
+  UPPER: ['UPPER(x)', 'A copy in capitals.'],
+  LOWER: ['LOWER(x)', 'A copy in lowercase.'],
+  ABS: ['ABS(x)', 'Removes the minus sign.'],
+  MIN: ['MIN(a, b, ...)', 'The smallest of its inputs (use TABLE_MIN for a table).'],
+  MAX: ['MAX(a, b, ...)', 'The largest of its inputs (use TABLE_MAX for a table).'],
+  TABLE_MIN: ['TABLE_MIN(t, [depth])', 'The smallest value in a table, searching depth levels of tables inside it.'],
+  TABLE_MAX: ['TABLE_MAX(t, [depth])', 'The largest value in a table, searching depth levels of tables inside it.'],
+  ROUND: ['ROUND(x, [decimals])', 'Rounds to the nearest (halves away from zero). The result is always exact.'],
+  FLOOR: ['FLOOR(x, [decimals])', 'Rounds down.'],
+  CEIL: ['CEIL(x, [decimals])', 'Rounds up.'],
+  PI: ['PI([decimals])', 'PI() is approximate (about 16 digits); PI(30) gives 30 exact decimals (up to 100).'],
+  RANDOM: ['RANDOM(min, max, [decimals], [seed])', 'A random number from min to max, including both. Decimals follow min and max unless you set them; a seed makes it repeatable.'],
+  TIME: ['TIME([decimals])', 'Seconds since the program started.'],
+  DELTA_TIME: ['DELTA_TIME([decimals])', 'Seconds since the last DELTA_TIME() call.'],
+  WAIT: ['WAIT(seconds)', 'Pauses the program.'],
+  SIN: ['SIN(degrees)', 'Sine, in degrees. Results are rounded to 12 decimals, so SIN(30) is exactly 0.5.'],
+  COS: ['COS(degrees)', 'Cosine, in degrees.'],
+  TAN: ['TAN(degrees)', 'Tangent, in degrees. TAN(90) is an error.'],
+  CSC: ['CSC(degrees)', 'Cosecant, in degrees.'],
+  SEC: ['SEC(degrees)', 'Secant, in degrees.'],
+  COT: ['COT(degrees)', 'Cotangent, in degrees.'],
+  ASIN: ['ASIN(x)', 'The angle (in degrees) whose sine is x.'],
+  ACOS: ['ACOS(x)', 'The angle (in degrees) whose cosine is x.'],
+  ATAN: ['ATAN(y, [x])', 'The angle in degrees; with two inputs, the angle of the point (x, y).'],
+};
+for (const t of ['SIN', 'COS', 'TAN', 'CSC', 'SEC', 'COT', 'ASIN', 'ACOS', 'ATAN']) {
+  const [sig, text] = BUILTINS[t];
+  BUILTINS['RAD_' + t] = ['RAD_' + sig.replace('degrees', 'radians'), text.replace(/degrees/g, 'radians').replace(/ Results are rounded.*$/, '') + ' Radian results are approximate.'];
+}
+
+/** Keywords explained, for hovers. */
+export const KEYWORD_HELP = {
+  IF: 'Runs a block when the condition is true. Only TRUE, 1, "TRUE" and "1" count as true; FALSE, 0, NULL, "FALSE" and "0" as false. Anything else is an error.',
+  ELIF: 'Another condition, checked when the ones above were false. ELSE IF and ELSEIF mean the same.',
+  ELSEIF: 'The same as ELIF.',
+  ELSE: 'Runs when no condition above was true.',
+  WHILE: 'Repeats while the condition is true.',
+  REPEAT: 'Runs a block a set number of times. REPEAT 0 does nothing; a negative or fractional count is an error.',
+  FOR: 'FOR x IN t loops over a table or text; FOR i IN 1 TO 5 counts (both ends included, and it counts down by itself). Loop variables are copies unless marked with @.',
+  IN: 'Part of FOR: what to loop over.',
+  TO: 'Counting: both ends are included. In a slice, t[2 TO 4] gives items 2, 3 and 4.',
+  STEP: 'How big each jump is. It can be a decimal; STEP 0 is an error.',
+  BREAK: 'Leaves the loop.',
+  SKIP: 'Jumps straight to the next round of the loop.',
+  FUNC: 'Makes a function. Inputs are copies unless marked with @; inputs can have defaults (n = 10), and ...rest collects extras into a table.',
+  RETURN: 'Leaves the function and gives back a value. Without RETURN a function gives back NULL.',
+  LOCAL: 'A variable that belongs only to this function, even if an outside variable has the same name. Only allowed inside functions.',
+  TRY: 'Runs a block; if an error happens, the FAIL block runs instead of crashing.',
+  FAIL: 'FAIL err { } runs when the TRY block errors. err.message, err.line and err.file tell you what happened.',
+  GOTO: 'Jumps to a POINT in the same function or file, forward or backward. It can jump out of blocks but not into them.',
+  POINT: 'Marks a spot that GOTO can jump to. Each name can be used once per function or file.',
+  IMPORT: 'Runs another file and adds its names to this file.',
+  LOAD: 'Runs another file and gives back its names as a table named after the file (LOAD "My-Tools.jlb" gives my_tools).',
+  END: 'Stops the whole program immediately, with no error report. TRY does not catch it.',
+  TRUE: 'True. Loosely equal to 1 ("TRUE" == TRUE), but TRUE === 1 is FALSE.',
+  FALSE: 'False. Loosely equal to 0.',
+  NULL: 'No value at all. Counts as 0 in math, as nothing when joined to text, and as false in conditions.',
+};
+
+/** Operators, with the parts that surprise people coming from other languages. */
+export const OPERATORS = {
+  '+': ['Add, or join', 'With any text, + joins: "25" + 2 is "252". With a table, it adds the value to the end (or the start, if the table is on the right). Two tables make a table of both.'],
+  '-': ['Subtract, or trim', 'On text: "hello" - 2 is "hel", and "hello world" - "o" removes every o. On tables: removes items from the end, or every copy of a value. Minus a negative number adds instead.'],
+  '*': ['Multiply, or repeat', 'Text and tables repeat: "ab" * 2 is "abab". A negative number reverses: "abc" * -1 is "cba".'],
+  '/': ['Divide', 'Exact: 1 / 3 * 3 is exactly 1. Dividing by zero is an error. Text can\'t be divided.'],
+  '%': ['Remainder', 'What is left over after long division: 7 % 3 is 1. It keeps the sign of the left side (-7 % 2 is -1).'],
+  '!%': ['Long-division answer', 'How many whole times it fits, cutting off the decimals: 7 !% 3 is 2, and -7 !% 2 is -3.'],
+  '^': ['Power', '2 ^ 3 is 8. It runs right to left: 2 ^ 3 ^ 2 is 2 ^ 9. Powers happen before the minus sign, so -2 ^ 2 is -4. (^ is power, not XOR; XOR is ~.)'],
+  '!^': ['Root', 'The left value goes inside the radical: 9 !^ 2 is 3, 27 !^ 3 is 3. Exact when the answer comes out even. An even root of a negative is an error.'],
+  '==': ['Equal (loose)', 'Converts numeric text when comparing with a number: "25" == 25 is TRUE. Tables compare by contents.'],
+  '===': ['Equal (strict)', 'Same value and same type, no conversion: "25" === 25 is FALSE. For tables: the very same shared table (from @=).'],
+  '!==': ['Not equal (loose)', 'The opposite of ==. Note: in .jlb, != is an error; use !== (or !=== for strict).'],
+  '!===': ['Not equal (strict)', 'The opposite of ===.'],
+  '!=': ['Not an operator', '!= is an error in .jlb. Use !== (loose) or !=== (strict).'],
+  '<': ['Less than', 'Numbers compare normally. Text against text compares lengths, not alphabetical order: "abc" < "abcd" is TRUE, "b" < "a" is FALSE.'],
+  '>': ['Greater than', 'Numbers compare normally. Text against text compares lengths: "abc" > "ab" is TRUE, "5" > "3" is FALSE.'],
+  '<=': ['Less or equal', 'For text, compares lengths: "abc" <= "xyz" is TRUE because they are the same length.'],
+  '>=': ['Greater or equal', 'For text, compares lengths.'],
+  '<==': ['Less than, or ==', 'For text: shorter, or exactly the same text. "abc" <== "xyz" is FALSE (same length, different text). For numbers, the same as <=.'],
+  '>==': ['Greater than, or ==', 'For text: longer, or exactly the same text. For numbers, the same as >=.'],
+  '&': ['AND (stops early)', 'Checks the right side only if the left is true, so x !== NULL & x.hp > 0 is safe. This is the reverse of C and JavaScript, where && stops early.'],
+  '&&': ['AND (checks both)', 'Always checks both sides, even when the left is false. Use & to stop early.'],
+  '!&': ['NAND (stops early)', 'True unless both are true. Checks the right side only if needed.'],
+  '!&&': ['NAND (checks both)', 'True unless both are true. Always checks both sides.'],
+  '|': ['OR (stops early)', 'Checks the right side only if the left is false. The reverse of C and JavaScript.'],
+  '||': ['OR (checks both)', 'Always checks both sides. Use | to stop early.'],
+  '!|': ['NOR (stops early)', 'True only if both are false.'],
+  '!||': ['NOR (checks both)', 'True only if both are false. Always checks both sides.'],
+  '~': ['XOR', 'True if exactly one side is true. Always checks both sides.'],
+  '!~': ['XNOR', 'True if both sides match.'],
+  '!': ['NOT', 'Flips TRUE and FALSE, using the truth rules.'],
+  '=': ['Assign (copy)', 'Copies the value. Tables are fully copied (cheaply, copy-on-write), so changing the copy never changes the original. Use @= to share instead. Writing = inside a condition is an error; use ==.'],
+  '@=': ['Assign (share)', 'Both names point at the same table or text, so a change through one shows in the other. For numbers, TRUE/FALSE and NULL it acts like =.'],
+  '@': ['Share', 'In FUNC f(@p) or FOR @x IN t, works on the real value instead of a copy.'],
+  '+=': ['Add to', 'x += v is x = x + v, with the same rules: joins text, adds to tables.'],
+  '-=': ['Subtract from', 'x -= v is x = x - v.'],
+  '*=': ['Multiply by', 'x *= v is x = x * v.'],
+  '/=': ['Divide by', 'x /= v is x = x / v.'],
+  '^=': ['Raise to', 'x ^= v is x = x ^ v.'],
+  '!^=': ['Root of', 'x !^= v is x = x !^ v.'],
+  '%=': ['Remainder of', 'x %= v is x = x % v.'],
+  '!%=': ['Long-division answer of', 'x !%= v is x = x !% v.'],
+  '...': ['Rest of the inputs', 'FUNC total(...nums) collects every extra input into a table.'],
+  '>>': ['Comment', '>> starts a comment to the end of the line. >>> starts a comment that runs until <<<.'],
+};
+
+/** Names of every built-in command, for highlighting. */
+export const BUILTIN_NAMES = Object.keys(BUILTINS);
