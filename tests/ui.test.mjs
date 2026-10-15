@@ -659,6 +659,59 @@ test('breakpoints come back with their file, and Run ignores them when asked', a
   assert.equal(await page.evaluate(() => window.jlbIde.settings.get('debugger.breakpoints')), '{}');
 });
 
+test('the table viewer shows a list of tables as a grid', async () => {
+  await page.click('.panel-tab:has-text("Quick-try")');
+  const type = async (code) => {
+    await page.click('.qt-input .cm-content');
+    await page.keyboard.type(code);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !document.querySelector('.qt-result.pending'));
+  };
+  await type('players = [[name: "Ann", hp: 10, bag: [1, 2]], [name: "Bo", hp: 7], [name: "Cy", hp: 12, team: "red"]]');
+  await type('players');
+  await page.click('.qt-entry:last-child .qt-view');
+  await page.waitForSelector('.tv-grid');
+  const grid = () => page.$$eval('.tv-grid:not(.tv-named) tr', (rows) => rows.map((r) => [...r.children].map((c) => c.textContent.replace(/[▲▼]/, '').trim()).join(' | ')));
+  assert.deepEqual(await grid(), ['# | name | hp | bag | team', '1 | "Ann" | 10 | [1, 2] | ', '2 | "Bo" | 7 |  | ', '3 | "Cy" | 12 |  | "red"']);
+  assert.match(await page.locator('.tv-count').innerText(), /3 items/);
+  // Sort by hp, then the other way.
+  await page.click('.tv-sort:has-text("hp")');
+  assert.deepEqual((await grid()).slice(1).map((r) => r.split(' | ')[1]), ['"Bo"', '"Ann"', '"Cy"']);
+  await page.click('.tv-sort:has-text("hp")');
+  assert.deepEqual((await grid()).slice(1).map((r) => r.split(' | ')[1]), ['"Cy"', '"Ann"', '"Bo"']);
+  // Filter.
+  await page.fill('.tv-filter', 'red');
+  assert.equal((await grid()).length, 2);
+  await page.fill('.tv-filter', '');
+  // A table inside opens, and the path leads back.
+  await page.click('.tv-open:has-text("[1, 2]")');
+  assert.match(await page.locator('.tv-crumbs').innerText(), /players\s*›\s*1\.bag/);
+  assert.deepEqual(await grid(), ['# | value | type', '1 | 1 | NUMBER', '2 | 2 | NUMBER']);
+  await page.click('.tv-crumb:has-text("players")');
+  assert.equal((await grid()).length, 4);
+});
+
+test('the debugger opens big tables in the table viewer and loads them in full', async () => {
+  const file = path.join(proj, 'big.jlb');
+  fs.writeFileSync(file, 'rows = []\nFOR i IN 1 TO 300 {\n    INSERT(rows, [n: i, sq: i * i], -1)\n}\nPRINT(LEN(rows))\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.evaluate(() => window.jlbIde.commands.run('debug.clear'));
+  await clickGutter(5);
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.dbg-status.paused:has-text("line 5")');
+  await page.hover('.dbg-sec-variables .dbg-var:has(.dbg-name:text-is("rows"))');
+  await page.click('.dbg-sec-variables .dbg-var:has(.dbg-name:text-is("rows")) .dbg-view');
+  await page.waitForSelector('.tv-grid');
+  assert.match(await page.locator('.tableview').innerText(), /Showing 200 of 300 entries/);
+  await page.click('.tv-note button:has-text("Load all")');
+  await page.waitForFunction(() => document.querySelector('.tv-count')?.textContent.startsWith('300 items'));
+  assert.doesNotMatch(await page.locator('.tableview').innerText(), /Showing/);
+  assert.match(await page.locator('.tv-grid tbody tr:last-child').innerText(), /300\s+300\s+90000/);
+  await page.keyboard.press('Shift+F5');
+  await page.waitForFunction(() => !window.jlbIde.runner.run_);
+  await page.evaluate(() => window.jlbIde.commands.run('debug.clear'));
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

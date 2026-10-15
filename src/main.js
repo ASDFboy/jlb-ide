@@ -29,8 +29,9 @@ import navigate from './plugins/navigate.js';
 import docs from './plugins/docs.js';
 import backups from './plugins/backups.js';
 import debuggerPlugin from './plugins/debugger.js';
+import tableview from './plugins/tableview.js';
 
-const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups, debuggerPlugin];
+const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups, tableview, debuggerPlugin];
 
 async function start() {
   const ide = { events: new Emitter() };
