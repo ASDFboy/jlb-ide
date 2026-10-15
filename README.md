@@ -46,7 +46,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 
 ### Everyday editing
 
-Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions, `POINT`s and the files brought in, find and replace, a command palette, a Monokai color theme (night and day versions), your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
+Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, brackets colored by depth (with a stray closing bracket marked red), folding of blocks, multi-line tables and `>>>` comments (the arrows next to the line numbers, with "⋯ 6 lines" in place of what's folded), suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions, `POINT`s and the files brought in, find and replace, a command palette, a Monokai color theme (night and day versions), your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
 
 ### Settings for everything
 
@@ -110,6 +110,8 @@ In **Settings → Files**, **Edit .jlb files with JLB IDE** adds **Edit with JLB
 | Ctrl+F | find and replace in this file |
 | Ctrl+Shift+F, Ctrl+Shift+H | find in all files, replace in all files |
 | F2 | rename the name under the cursor everywhere |
+| Ctrl+Shift+[, Ctrl+Shift+] | fold the block the cursor is in, unfold it |
+| Ctrl+Alt+[, Ctrl+Alt+] | fold everything, unfold everything |
 | Ctrl+/ | comment or uncomment lines with `>>` |
 | Ctrl+Space | show suggestions |
 | Ctrl+F1 | the language guide |
@@ -150,7 +152,7 @@ Then open <http://127.0.0.1:5180>. `npm run dev:web` rebuilds on every change. T
 
 ### Tests
 
-`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, find in files, renaming, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
+`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, find in files, renaming, folding and bracket colors, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
 
 ## How it works
 

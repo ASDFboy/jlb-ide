@@ -49,6 +49,9 @@
   --syn-property: #f8f8f2;
   --syn-punct: #cfcfc2;
   --syn-invalid: #f92672;
+  --bracket-1: #ffd866;
+  --bracket-2: #d58ff5;
+  --bracket-3: #6fb8ff;
 }
 
 :root[data-theme='day'] {
@@ -96,6 +99,9 @@
   --syn-property: #272822;
   --syn-punct: #6e6b5c;
   --syn-invalid: #c8125a;
+  --bracket-1: #9a6f00;
+  --bracket-2: #9b30c2;
+  --bracket-3: #1a66c9;
 }
 
 * {
@@ -3476,4 +3482,68 @@ tr:hover .view-table,
 .toast-action {
   margin-left: 4px;
   font-weight: 700;
+}
+
+/* ---------- folding and bracket colors ---------- */
+.cm-foldGutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.cm-foldGutter .cm-gutterElement:hover {
+  color: var(--text);
+}
+
+.fold-marker {
+  display: grid;
+  place-items: center;
+}
+
+/* Arrows show when the mouse is over the gutter, or for code that's folded. */
+.fold-hover .cm-foldGutter .fold-marker.open {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.fold-hover .cm-gutters:hover .fold-marker.open {
+  opacity: 1;
+}
+
+.fold-marker.folded {
+  color: var(--sky);
+}
+
+.cm-editor .fold-placeholder {
+  margin: 0 3px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.cm-editor .fold-placeholder:hover {
+  border-color: var(--tint-sky-line);
+  color: var(--text);
+}
+
+/* The bracket color wins over the syntax color, whichever is the inner span. */
+.cm-content .cm-br0, .cm-content .cm-br0 span { color: var(--bracket-1) !important; }
+.cm-content .cm-br1, .cm-content .cm-br1 span { color: var(--bracket-2) !important; }
+.cm-content .cm-br2, .cm-content .cm-br2 span { color: var(--bracket-3) !important; }
+.cm-content .cm-br-bad, .cm-content .cm-br-bad span {
+  color: var(--syn-invalid) !important;
+  text-decoration: underline wavy;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold-hover .cm-foldGutter .fold-marker.open {
+    transition: none;
+  }
 }

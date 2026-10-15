@@ -34,8 +34,9 @@ import testsPlugin from './plugins/tests.js';
 import tableview from './plugins/tableview.js';
 import search from './plugins/search.js';
 import rename from './plugins/rename.js';
+import folding from './plugins/folding.js';
 
-const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, search, rename, docs, backups, tableview, debuggerPlugin, compare, testsPlugin];
+const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, search, rename, folding, docs, backups, tableview, debuggerPlugin, compare, testsPlugin];
 
 async function start() {
   const ide = { events: new Emitter() };
