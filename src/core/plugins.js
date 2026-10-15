@@ -10,7 +10,7 @@ import * as cmLint from '@codemirror/lint';
 import * as cmCommands from '@codemirror/commands';
 import * as lezerHighlight from '@lezer/highlight';
 import { h, clear, icon, toast, confirm, prompt, choose, contextMenu } from './ui.js';
-import { invoke } from './backend.js';
+import { invoke, pickOpen } from './backend.js';
 import { join, basename } from './paths.js';
 import * as langData from '../lang/data.js';
 
@@ -22,6 +22,57 @@ export class Plugins {
     this.ide = ide;
     this.list = new Map();
     this.services = new Map();
+    ide.settings.define({
+      key: 'plugins.autoReload',
+      title: 'Reload plugins when their files change',
+      description: 'Handy while writing a plugin: save main.js and see the change. Checks every 2 seconds while the IDE window is in front.',
+      type: 'boolean',
+      default: true,
+      section: 'Plugins',
+    });
+  }
+
+  /** Watches the plugins folder (cheaply: sizes and times only) and reloads on a change. */
+  watch() {
+    let last = null;
+    let busy = false;
+    const tick = async () => {
+      if (busy || !this.ide.settings.get('plugins.autoReload') || document.hidden || !document.hasFocus()) return;
+      busy = true;
+      try {
+        const stamp = await invoke('plugins_stamp');
+        if (last !== null && stamp !== last) await this.reload({ note: 'Plugins reloaded (their files changed)' });
+        last = stamp;
+      } catch {
+        // An older backend without plugins_stamp: nothing to watch.
+        clearInterval(this.watchTimer);
+      }
+      busy = false;
+    };
+    tick();
+    this.watchTimer = setInterval(tick, 2000);
+  }
+
+  /** Copies a plugin's folder (one with a plugin.json) into the plugins folder and starts it. */
+  async installFromFolder(from) {
+    from = from || (await pickOpen({ folder: true }));
+    if (!from) return;
+    let dest;
+    try {
+      dest = await invoke('install_plugin', { from, replace: false });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      const m = msg.match(/^already installed: (.+)$/);
+      if (!m) return toast(`Couldn't install that plugin: ${msg}`, { kind: 'error', timeout: 8000 });
+      if (!(await confirm(`A plugin called ${m[1]} is already installed. Replace it with this one?`, { ok: 'Replace' }))) return;
+      try {
+        dest = await invoke('install_plugin', { from, replace: true });
+      } catch (e2) {
+        return toast(`Couldn't install that plugin: ${String(e2?.message || e2)}`, { kind: 'error', timeout: 8000 });
+      }
+    }
+    await this.reload({ note: `Installed the plugin from ${basename(from)}` });
+    return dest;
   }
 
   /**
@@ -277,12 +328,12 @@ export class Plugins {
     await invoke('create_dir', { path: dir });
     await invoke('write_text', { path: join(dir, 'plugin.json'), text: exampleManifest(id) });
     await invoke('write_text', { path: join(dir, 'main.js'), text: EXAMPLE_MAIN });
-    toast(`Created the plugin ${id}. Reload plugins to start it.`, { kind: 'ok', timeout: 6000 });
+    toast(`Created the plugin ${id}.${this.ide.settings.get('plugins.autoReload') ? ' It starts in a moment.' : ' Reload plugins to start it.'}`, { kind: 'ok', timeout: 6000 });
     this.ide.workspace.openFile(join(dir, 'main.js'));
   }
 
   /** Re-reads the plugins folder (installed plugins only; built-ins stay running). */
-  async reload() {
+  async reload({ note = 'Plugins reloaded' } = {}) {
     for (const p of [...this.list.values()]) {
       if (p.builtin) continue;
       this.deactivate(p);
@@ -291,7 +342,7 @@ export class Plugins {
     await this.loadInstalled();
     for (const p of this.list.values()) if (!p.builtin && !p.broken && this.enabled(p)) await this.activate(p);
     this.ide.events.emit('plugins-changed');
-    toast('Plugins reloaded', { kind: 'ok', timeout: 1500 });
+    toast(note, { kind: 'ok', timeout: 2500 });
   }
 
   // ---------- the Plugins view ----------
@@ -314,6 +365,7 @@ export class Plugins {
       el.append(
         h('div.view-buttons',
           h('button.btn', { on: { click: () => this.createExample() } }, icon('plus', 15), 'Create a plugin'),
+          h('button.btn', { on: { click: () => this.installFromFolder() } }, icon('folder', 15), 'Install from a folder'),
           h('button.btn', { on: { click: () => this.reload() } }, icon('refresh', 15), 'Reload plugins')),
         h('p.view-note', 'Plugins folder: ', h('code.selectable', dir)),
         h('p.view-note.warn', 'Plugins can read and change your files and run programs, so only install plugins you trust.'));

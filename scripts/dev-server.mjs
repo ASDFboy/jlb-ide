@@ -107,29 +107,37 @@ const commands = {
       repl?.child.kill();
       const child = spawn(interpreter, ['--repl'], { cwd: cwd || undefined });
       child.stdout.setEncoding('utf8');
-      repl = { child, interpreter, cwd, buf: '', waiting: null };
+      const session = { child, interpreter, cwd, buf: '', waiting: null };
+      repl = session;
       child.stdout.on('data', (d) => {
-        repl.buf += d;
-        const i = repl.buf.indexOf(MARK);
-        const nl = i >= 0 ? repl.buf.indexOf('\n', i) : -1;
-        if (nl >= 0 && repl.waiting) {
-          const output = repl.buf.slice(0, i);
-          const reply = repl.buf.slice(i + 1, nl);
-          repl.buf = repl.buf.slice(nl + 1);
-          const w = repl.waiting;
-          repl.waiting = null;
+        session.buf += d;
+        const i = session.buf.indexOf(MARK);
+        const nl = i >= 0 ? session.buf.indexOf('\n', i) : -1;
+        if (nl >= 0 && session.waiting) {
+          const output = session.buf.slice(0, i);
+          const reply = session.buf.slice(i + 1, nl);
+          session.buf = session.buf.slice(nl + 1);
+          const w = session.waiting;
+          session.waiting = null;
           w.resolve({ output, reply });
         }
       });
       child.on('close', () => {
-        repl?.waiting?.reject('the Quick-try session stopped');
-        repl = null;
+        session.waiting?.reject('the Quick-try session stopped');
+        if (repl === session) repl = null;
       });
     }
     const lines = code.split('\n').filter((l) => l.trim() !== MARK).join('\n');
     return new Promise((resolve, reject) => {
       repl.waiting = { resolve, reject };
       repl.child.stdin.write(lines + '\n' + MARK + '\n');
+    });
+  },
+  async repl_answer({ text }) {
+    if (!repl) throw "the Quick-try session isn't running";
+    return new Promise((resolve, reject) => {
+      repl.waiting = { resolve, reject };
+      repl.child.stdin.write(text.replace(/[\r\n]/g, ' ') + '\n');
     });
   },
   async repl_reset() {
@@ -169,6 +177,35 @@ const commands = {
       out.push({ folder, manifest, main: await read(m.main || 'main.js'), style: await read(m.style || 'style.css'), error: null });
     }
     return out;
+  },
+  async plugins_stamp() {
+    const d = await commands.plugins_dir();
+    const parts = [];
+    for (const name of await fs.readdir(d)) {
+      const folder = path.join(d, name);
+      if (!(await fs.stat(folder)).isDirectory()) continue;
+      for (const f of await fs.readdir(folder)) {
+        const st = await fs.stat(path.join(folder, f));
+        if (st.isFile()) parts.push(`${path.join(folder, f)}|${st.size}|${Math.round(st.mtimeMs)}`);
+      }
+    }
+    return parts.sort().join('\n');
+  },
+  async install_plugin({ from, replace }) {
+    let m;
+    try {
+      m = JSON.parse(await fs.readFile(path.join(from, 'plugin.json'), 'utf8'));
+    } catch {
+      throw "that folder has no plugin.json, so it isn't a plugin";
+    }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(m.id || '')) throw `"${m.id}" in plugin.json isn't a valid plugin id (use lowercase letters, digits and dashes)`;
+    const dest = path.join(await commands.plugins_dir(), m.id);
+    if (fss.existsSync(dest)) {
+      if (!replace) throw `already installed: ${m.id}`;
+      await fs.rm(dest, { recursive: true });
+    }
+    await fs.cp(from, dest, { recursive: true, filter: (p) => !/[\\/](\.git|node_modules)$/.test(p) });
+    return dest;
   },
   async find_interpreters() {
     const c = process.env.JLB_C_PATH;

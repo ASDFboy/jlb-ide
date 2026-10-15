@@ -58,6 +58,7 @@ async function start() {
   for (const p of BUILT_IN) ide.plugins.add(p);
   await ide.plugins.loadInstalled();
   await ide.plugins.startAll();
+  ide.plugins.watch();
   ide.layout.showView('explorer');
   await ide.workspace.restore();
   // Files the IDE was opened with (from the command line, or "Open with JLB IDE").
@@ -102,6 +103,7 @@ function registerCommands(ide) {
   add('run.c', 'Run with the C interpreter', () => s.set('run.interpreter', 'c'), null, 'Run');
   add('plugins.reload', 'Reload plugins', () => ide.plugins.reload(), null, 'Plugins');
   add('plugins.create', 'Create a plugin', () => ide.plugins.createExample(), null, 'Plugins');
+  add('plugins.install', 'Install a plugin from a folder', () => ide.plugins.installFromFolder(), null, 'Plugins');
   add('plugins.show', 'Show plugins', () => lay.showView('plugins'), null, 'Plugins');
 }
 

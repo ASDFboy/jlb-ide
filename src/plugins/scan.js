@@ -67,48 +67,91 @@ export function scan(text) {
   const defined = new Set();
   const definedAt = new Map();
   const uses = [];
+  // Where names live, following .jlb's rules:
+  //   globals   given a value outside any function (or FUNC names), with the first place
+  //   locals    per function: its inputs, LOCAL names, and names first given a value inside it
+  //   blocks    FOR loop variables and FAIL names exist only inside their { } block
+  const globals = new Map();
+  const fields = new Map(); // table name -> entry names seen (t.name = ..., [name: 1])
+  const addField = (table, name) => {
+    if (!fields.has(table)) fields.set(table, new Set());
+    fields.get(table).add(name);
+  };
   const define = (name, off) => {
     defined.add(name);
     if (!definedAt.has(name)) definedAt.set(name, where(off));
+  };
+  const scopes = []; // { depth, names: Set, func: index | -1, kind }
+  let depth = 0;
+  let pending = null; // what the next "{" opens: { kind, names, func }
+  const currentFunc = () => {
+    for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].kind === 'func') return scopes[i].func;
+    return -1;
+  };
+  const giveValue = (name, off) => {
+    define(name, off);
+    const f = currentFunc();
+    if (f >= 0) funcs[f].locals.add(name);
+    else if (!globals.has(name)) globals.set(name, off);
+  };
+  const visibleBlockNames = () => {
+    const names = new Set();
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      for (const n of scopes[i].names) names.add(n);
+      if (scopes[i].kind === 'func') break; // no closures: an outer function's names aren't visible
+    }
+    return names;
   };
 
   for (let k = 0; k < toks.length; k++) {
     const { t, off } = toks[k];
     const next = toks[k + 1]?.t;
     const prev = toks[k - 1]?.t;
+    if (t === '{') {
+      depth++;
+      scopes.push({ depth, names: new Set(pending?.names || []), func: pending?.func ?? -1, kind: pending?.kind || 'block' });
+      pending = null;
+      continue;
+    }
+    if (t === '}') {
+      if (scopes.length && scopes[scopes.length - 1].depth === depth) scopes.pop();
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
     if (t === 'FUNC') {
       let j = k + 1;
       let name = null;
+      const index = funcs.length;
+      const fn = { name, params: [], locals: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc() };
+      funcs.push(fn);
       if (isName(toks[j]?.t)) {
-        name = toks[j].t;
-        define(name, toks[j].off);
+        fn.name = name = toks[j].t;
+        fn.nameCol = where(toks[j].off).col;
+        // A named function is a value like any other: global when made outside functions.
+        giveValue(name, toks[j].off);
         j++;
       }
-      const params = [];
+      const names = [];
       if (toks[j]?.t === '(') {
-        let depth = 0;
+        let d = 0;
         let start = true;
         for (j++; j < toks.length; j++) {
           const x = toks[j].t;
-          if (x === '(' || x === '[') depth++;
+          if (x === '(' || x === '[') d++;
           else if (x === ')' || x === ']') {
-            if (depth === 0) break;
-            depth--;
-          } else if (x === ',' && depth === 0) start = true;
+            if (d === 0) break;
+            d--;
+          } else if (x === ',' && d === 0) start = true;
           else if (start && isName(x)) {
             define(x, toks[j].off);
-            params.push(toks[j - 1]?.t === '@' ? '@' + x : toks[j - 1]?.t === '...' ? '...' + x : x);
+            names.push(x);
+            fn.params.push(toks[j - 1]?.t === '@' ? '@' + x : toks[j - 1]?.t === '...' ? '...' + x : x);
             start = false;
           }
         }
-        // Inputs are handled; don't count them again below.
-        const fnTok = toks[k + 1];
-        const pos = where(fnTok?.off ?? off);
-        funcs.push({ name, params, line: where(off).line, col: where(off).col, nameCol: name ? pos.col : null });
-        k = j;
-        continue;
       }
-      funcs.push({ name, params, line: where(off).line, col: where(off).col });
+      pending = { kind: 'func', names, func: index };
+      k = j;
       continue;
     }
     if ((t === 'POINT' || t === 'GOTO') && isName(next)) {
@@ -119,35 +162,71 @@ export function scan(text) {
       continue;
     }
     if (t === 'FOR') {
-      for (let j = k + 1; j < toks.length && toks[j].t !== 'IN' && toks[j].t !== '{'; j++) {
-        if (isName(toks[j].t)) define(toks[j].t, toks[j].off);
+      const names = [];
+      let j = k + 1;
+      for (; j < toks.length && toks[j].t !== 'IN' && toks[j].t !== '{'; j++) {
+        if (isName(toks[j].t)) {
+          define(toks[j].t, toks[j].off);
+          names.push(toks[j].t);
+        }
       }
+      pending = { kind: 'block', names, func: -1 };
+      k = j - 1;
       continue;
     }
-    if ((t === 'FAIL' || t === 'LOCAL') && isName(next)) {
+    if (t === 'FAIL' && isName(next)) {
       define(next, toks[k + 1].off);
+      pending = { kind: 'block', names: [next], func: -1 };
+      k++;
+      continue;
+    }
+    if (t === 'LOCAL' && isName(next)) {
+      giveValue(next, toks[k + 1].off);
       k++;
       continue;
     }
     if (!isName(t)) continue;
-    if (prev === '.') continue; // a table entry: t.name
-    if (next === ':') continue; // a name in a table: [name: 1]
-    if (ASSIGN.has(next)) {
-      define(t, off);
+    if (prev === '.') {
+      // a table entry: t.name
+      if (isName(toks[k - 2]?.t) && toks[k - 3]?.t !== '.') addField(toks[k - 2].t, t);
       continue;
     }
-    if (COMPOUND.has(next)) define(t, off);
-    uses.push({ name: t, ...where(off) });
+    if (next === ':') continue; // a name in a table: [name: 1]
+    if (ASSIGN.has(next)) {
+      giveValue(t, off);
+      // t = [name: 1, other: 2] names its entries.
+      if (toks[k + 2]?.t === '[') {
+        let d = 0;
+        for (let j = k + 2; j < toks.length; j++) {
+          const x = toks[j].t;
+          if (x === '[' || x === '(' || x === '{') d++;
+          else if (x === ']' || x === ')' || x === '}') {
+            if (--d === 0) break;
+          } else if (d === 1 && isName(x) && toks[j + 1]?.t === ':' && (toks[j - 1].t === '[' || toks[j - 1].t === ',')) addField(t, x);
+        }
+      }
+      continue;
+    }
+    // x += 1 reads x first, so x needs a value already.
+    uses.push({ name: t, off, ...where(off), func: currentFunc(), depth, blockNames: visibleBlockNames() });
+    if (COMPOUND.has(next)) giveValue(t, off);
   }
 
   // LOAD "My-Tools.jlb" gives a table called my_tools.
+  const loads = new Set();
   for (const m of noComments.matchAll(/\bLOAD\s+["']([^"']+)["']/g)) {
     const base = m[1].split(/[\\/]/).pop().replace(/\.jlb$/i, '');
-    define(base.toLowerCase().replace(/[-\s]+/g, '_'), m.index);
+    const name = base.toLowerCase().replace(/[-\s]+/g, '_');
+    define(name, m.index);
+    loads.add(name);
   }
 
   return {
     funcs,
+    globals,
+    fields,
+    loads,
+    lineAt: (off) => where(off).line,
     points,
     gotos,
     defined,

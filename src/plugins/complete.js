@@ -1,6 +1,8 @@
 // Suggestions while typing: commands, keywords, your own names, and snippets.
 
 import { snippetCompletion } from '@codemirror/autocomplete';
+import { StateField } from '@codemirror/state';
+import { showTooltip } from '@codemirror/view';
 import { scan } from './scan.js';
 
 const SNIPPETS = [
@@ -22,6 +24,8 @@ export default {
   settings: [
     { key: 'snippets', title: 'Suggest ready-made blocks (IF, FOR, FUNC, ...)', type: 'boolean', default: true },
     { key: 'names', title: 'Suggest names from the current file', type: 'boolean', default: true },
+    { key: 'fields', title: 'Suggest table entries after a dot', description: 'After hero. it suggests the entries hero is given in this file, like hero.hp.', type: 'boolean', default: true },
+    { key: 'inputHints', title: 'Show a command\'s inputs while typing them', description: 'Inside PRINT( ... ) or your own functions, shows what goes in each spot, with the current one highlighted.', type: 'boolean', default: true },
   ],
   activate(api) {
     const { BUILTINS, KEYWORDS, KEYWORD_HELP, CONSTANTS } = api.jlb;
@@ -36,12 +40,20 @@ export default {
       const before = line.text.slice(0, from - line.from);
       // Not inside comments or text.
       if (/(^|[^>])>>/.test(before.replace(/"[^"]*"|'(?:\\.|[^'\\])*'/g, '')) || /["'][^"']*$/.test(before.replace(/"[^"]*"|'(?:\\.|[^'\\])*'/g, ''))) return null;
-      if (/\.\s*$/.test(before)) return null; // after "t." comes a table entry name, which can be anything
-
       const text = ctx.state.doc.toString();
       if (cache.text !== text) cache = { text, info: scan(text) };
       const info = cache.info;
       const options = [];
+
+      // After "hero." come hero's entries (or a function's LOCAL names, like f.secret).
+      const dot = before.match(/([a-z_][a-z0-9_]*)\.\s*$/);
+      if (dot || /\.\s*$/.test(before)) {
+        if (!dot || !api.settings.get('fields')) return null;
+        for (const name of info.fields.get(dot[1]) || []) options.push({ label: name, type: 'property', boost: 1 });
+        const fn = info.funcs.find((f) => f.name === dot[1]);
+        if (fn) for (const name of fn.locals) options.push({ label: name, type: 'variable', detail: `in ${fn.name}()` });
+        return options.length ? { from, options, validFor: /^[a-z0-9_]*$/ } : null;
+      }
 
       // After GOTO, only POINT names make sense.
       if (/\bGOTO\s+$/.test(before)) {
@@ -84,5 +96,122 @@ export default {
       }
       return { from, options };
     });
+
+    // ---------- input hints ----------
+    const signature = (name, state) => {
+      if (BUILTINS[name]) {
+        const [sig, desc] = BUILTINS[name];
+        return { name, params: splitParams(sig.slice(sig.indexOf('(') + 1, sig.lastIndexOf(')'))), desc };
+      }
+      const text = state.doc.toString();
+      if (cache.text !== text) cache = { text, info: scan(text) };
+      const f = cache.info.funcs.find((x) => x.name === name);
+      return f ? { name, params: f.params, desc: null } : null;
+    };
+    const hintField = StateField.define({
+      create: () => null,
+      update(value, tr) {
+        if (!tr.docChanged && !tr.selection) return value;
+        if (!api.settings.get('inputHints')) return null;
+        return hintAt(tr.state, signature);
+      },
+      provide: (f) => showTooltip.from(f),
+    });
+    api.editor.addExtension(hintField);
   },
 };
+
+/** "t, value, [pos]" → ["t", "value", "[pos]"], keeping [ ] groups together. */
+function splitParams(inner) {
+  const out = [];
+  let d = 0;
+  let cur = '';
+  for (const ch of inner) {
+    if (ch === '[' || ch === '(') d++;
+    if (ch === ']' || ch === ')') d--;
+    if (ch === ',' && d === 0) {
+      out.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/** The call the cursor is inside, and which input it's on, as a tooltip. */
+function hintAt(state, signature) {
+  const sel = state.selection.main;
+  if (!sel.empty) return null;
+  const pos = sel.head;
+  const start = Math.max(0, state.doc.lineAt(pos).from - 2000);
+  const text = state.sliceDoc(start, pos);
+  let depth = 0;
+  let commas = 0;
+  let quote = null;
+  // Walk back to the "(" this spot is inside, counting commas at that level.
+  // Text is skipped by first finding which characters are inside quotes.
+  const inText = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      inText[i] = 1;
+      if (c === '\\' && quote === "'") { inText[++i] = 1; continue; }
+      if (c === quote) quote = null;
+    } else if (c === '"' || c === "'") {
+      quote = c;
+      inText[i] = 1;
+    } else if (c === '>' && text[i + 1] === '>') {
+      // a comment to the end of the line
+      const nl = text.indexOf('\n', i);
+      const stop = nl < 0 ? text.length : nl;
+      for (; i < stop; i++) inText[i] = 1;
+    }
+  }
+  if (quote) return null;
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (inText[i]) continue;
+    const c = text[i];
+    if (c === ')' || c === ']' || c === '}') depth++;
+    else if (c === '[' || c === '{') {
+      if (depth === 0) return null; // inside a table or block, not a call
+      depth--;
+    } else if (c === '(') {
+      if (depth > 0) { depth--; continue; }
+      const name = text.slice(0, i).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/)?.[1];
+      if (!name || /^(IF|ELIF|ELSEIF|WHILE|FOR|REPEAT|RETURN|FUNC)$/.test(name)) return null;
+      if (/\bFUNC\s+$/.test(text.slice(0, i - name.length))) return null; // defining, not calling
+      const sig = signature(name, state);
+      if (!sig || !sig.params.length) return null;
+      return {
+        pos: start + i - name.length,
+        above: true,
+        strictSide: false,
+        create: () => {
+          const dom = document.createElement('div');
+          dom.className = 'jlb-hint';
+          // A "..." input takes everything from there on.
+          const rest = sig.params.findIndex((p) => p.includes('...'));
+          const at = rest >= 0 && commas >= rest ? rest : commas;
+          dom.append(sig.name + '(');
+          sig.params.forEach((p, k) => {
+            if (k) dom.append(', ');
+            const span = document.createElement('span');
+            span.textContent = p;
+            if (k === at) span.className = 'on';
+            dom.append(span);
+          });
+          dom.append(')');
+          if (sig.desc) {
+            const d = document.createElement('span');
+            d.className = 'desc';
+            d.textContent = sig.desc;
+            dom.append(d);
+          }
+          return { dom };
+        },
+      };
+    } else if (c === ',' && depth === 0) commas++;
+    else if (c === '\n' && depth === 0 && /\{\s*$/.test(text.slice(0, i))) return null;
+  }
+  return null;
+}

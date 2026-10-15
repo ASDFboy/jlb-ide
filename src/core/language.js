@@ -20,6 +20,7 @@ export class Language {
     this.completions = [];
     this.checks = [];
     this.problems = [];
+    this.byDoc = new Map(); // doc id -> { doc, list }
     const s = ide.settings;
     s.define({ key: 'editor.hover', title: 'Show info when the mouse rests on code', type: 'boolean', default: true, section: 'Editor' });
     s.define({ key: 'editor.hoverCtrl', title: 'Only while holding Ctrl', description: 'Hover info appears only when you hold Ctrl (⌘ on a Mac) with the mouse over code, so it never gets in the way.', type: 'boolean', default: false, section: 'Editor' });
@@ -31,6 +32,7 @@ export class Language {
     window.addEventListener('keyup', track, true);
     s.define({ key: 'editor.hoverDelay', title: 'Hover delay', description: 'Milliseconds before hover info appears.', type: 'number', default: 350, min: 0, max: 3000, section: 'Editor' });
     s.define({ key: 'editor.suggest', title: 'Suggest words while typing', description: 'Ctrl+Space shows suggestions even when this is off.', type: 'boolean', default: true, section: 'Editor' });
+    s.define({ key: 'editor.problemsAllFiles', title: 'List problems from every open file', description: 'Off lists only the file you are looking at.', type: 'boolean', default: true, section: 'Editor' });
     s.define({ key: 'editor.checkDelay', title: 'Checking delay', description: 'Milliseconds after you stop typing before code is checked for mistakes.', type: 'number', default: 400, min: 0, max: 5000, section: 'Editor' });
 
     this.removeExt = null;
@@ -39,7 +41,17 @@ export class Language {
     s.onChange('editor.hoverDelay', () => this.rebuild());
     s.onChange('editor.suggest', () => this.rebuild());
     s.onChange('editor.checkDelay', () => this.rebuild());
-    ide.events.on('active-change', () => this.recheck());
+    ide.events.on('active-change', () => {
+      this.publish();
+      this.recheck();
+    });
+    s.onChange('editor.problemsAllFiles', () => this.publish());
+    // Files opened in the background are checked too, one at a time.
+    ide.events.on('file-open', (doc) => this.queueCheck(doc));
+    ide.events.on('file-close', (doc) => {
+      this.byDoc.delete(doc.id);
+      this.publish();
+    });
   }
 
   /** Rebuilds the editor extensions after settings or providers change. */
@@ -59,8 +71,13 @@ export class Language {
         closeOnBlur: true,
       }));
       if (this.checks.length) exts.push(linter((view) => this.check(view), { delay: s.get('editor.checkDelay') }));
-      else this.setProblems([]);
+      else {
+        this.byDoc.clear();
+        this.publish();
+      }
       this.removeExt = this.ide.editor.addExtension(exts);
+      // The checks changed, so the files in the background need checking again.
+      for (const doc of this.ide.workspace?.docs || []) this.queueCheck(doc);
     });
   }
 
@@ -185,9 +202,8 @@ export class Language {
     if (this.checks.length) setTimeout(() => forceLinting(v), 30);
   }
 
-  async check(view) {
-    const state = view.state;
-    const doc = this.ide.workspace.active;
+  /** Runs every check on some text; gives back editor diagnostics for `state`. */
+  async diagnose(state, doc) {
     const ctx = { text: state.doc.toString(), state, path: doc?.path || null, doc };
     const all = [];
     for (const rule of this.checks) {
@@ -198,8 +214,6 @@ export class Language {
         console.error(`[jlb-ide] the check "${rule.id}" failed:`, e);
       }
     }
-    // The text may have changed while checks ran; drop results for an old version.
-    if (view.state.doc !== state.doc) return [];
     const out = [];
     for (const d of all) {
       const r = this.range(state, d);
@@ -216,8 +230,37 @@ export class Language {
         })) : undefined,
       });
     }
-    this.setProblems(out.map((d) => ({ ...d, line: state.doc.lineAt(d.from).number, col: d.from - state.doc.lineAt(d.from).from + 1, file: doc })));
     return out;
+  }
+
+  /** Remembers a file's problems for the Problems panel. */
+  store(doc, state, list) {
+    if (!doc) return;
+    this.byDoc.set(doc.id, {
+      doc,
+      list: list.map((d) => ({ ...d, line: state.doc.lineAt(d.from).number, col: d.from - state.doc.lineAt(d.from).from + 1, file: doc })),
+    });
+    this.publish();
+  }
+
+  async check(view) {
+    const state = view.state;
+    const doc = this.ide.workspace.active;
+    const out = await this.diagnose(state, doc);
+    // The text may have changed while checks ran; drop results for an old version.
+    if (view.state.doc !== state.doc) return [];
+    this.store(doc, state, out);
+    return out;
+  }
+
+  /** Checks a file that isn't on screen, so its problems are listed too. */
+  queueCheck(doc) {
+    this.waiting = (this.waiting || Promise.resolve()).then(async () => {
+      if (!this.checks.length || doc === this.ide.workspace.active || !this.ide.workspace.docs.includes(doc)) return;
+      const state = doc.state;
+      const out = await this.diagnose(state, doc);
+      if (doc.state === state && doc !== this.ide.workspace.active && this.ide.workspace.docs.includes(doc)) this.store(doc, state, out);
+    }).catch((e) => console.error('[jlb-ide] checking a background file failed:', e));
   }
 
   /** Turns line/column (1-based) into editor offsets; a missing column covers the line's text. */
@@ -241,9 +284,22 @@ export class Language {
     return { from, to: Math.max(to, from) };
   }
 
-  setProblems(list) {
-    this.problems = list.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.from - b.from);
+  /** Sends the problems list out: the open file's first, then the other open files'. */
+  publish() {
+    const active = this.ide.workspace?.active;
+    const all = this.ide.settings.get('editor.problemsAllFiles');
+    const order = (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.from - b.from;
+    const groups = [...this.byDoc.values()]
+      .filter((g) => this.ide.workspace?.docs.includes(g.doc) && (all || g.doc === active))
+      .sort((a, b) => (a.doc === active ? -1 : b.doc === active ? 1 : 0));
+    this.problems = groups.flatMap((g) => [...g.list].sort(order));
     this.ide.events.emit('problems', this.problems);
+  }
+
+  goToProblem(p) {
+    const ws = this.ide.workspace;
+    if (p.file && p.file !== ws.active && ws.docs.includes(p.file)) ws.activate(p.file);
+    this.ide.editor.goTo(p.line, p.col);
   }
 
   problemsPanel() {
@@ -255,16 +311,25 @@ export class Language {
       const errors = list.filter((p) => p.severity === 'error').length;
       this.ide.layout.setBadge('problems', list.length || '', errors ? 'error' : list.length ? 'warning' : '');
       if (!list.length) {
-        el.append(h('div.empty-note', h('p', this.checks.length ? 'No problems found in this file.' : 'Mistake checking is off. Turn it on in Settings → Features.')));
+        el.append(h('div.empty-note', h('p', this.checks.length ? this.ide.settings.get('editor.problemsAllFiles') ? 'No problems found in the open files.' : 'No problems found in this file.' : 'Mistake checking is off. Turn it on in Settings → Features.')));
         return;
       }
       const ul = h('ul.problem-list');
+      const files = new Set(list.map((p) => p.file));
+      const headings = files.size > 1 || !files.has(this.ide.workspace.active);
+      let last = null;
       for (const p of list) {
+        // With problems in more than one file, each file gets a heading.
+        if (headings && p.file !== last) {
+          last = p.file;
+          const n = list.filter((q) => q.file === p.file).length;
+          ul.append(h('li.problem-file', { title: p.file?.path || p.file?.name || '' }, icon('file', 13), h('span', p.file?.name || 'untitled'), h('span.count', String(n))));
+        }
         ul.append(h(`li.problem.${p.severity}`, {
           tabindex: '0',
           on: {
-            click: () => this.ide.editor.goTo(p.line, p.col),
-            keydown: (e) => e.key === 'Enter' && this.ide.editor.goTo(p.line, p.col),
+            click: () => this.goToProblem(p),
+            keydown: (e) => e.key === 'Enter' && this.goToProblem(p),
           },
         }, icon(p.severity === 'info' ? 'info' : 'alert', 15), h('span.problem-msg', p.message), h('span.problem-where', { title: p.source || '' }, `Line ${p.line}`)));
       }
