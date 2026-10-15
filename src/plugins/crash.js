@@ -9,6 +9,7 @@ export default {
   settings: [
     { key: 'autoShow', title: 'Open the Crash panel when a program crashes', type: 'boolean', default: true },
     { key: 'markLine', title: 'Mark the crashing line in the editor', type: 'boolean', default: true },
+    { key: 'openFile', title: 'Open the file where the crash happened', description: 'Switches to the file with the error, even when it\'s a file brought in with IMPORT or LOAD.', type: 'boolean', default: true },
     { key: 'hoverValues', title: 'Show values from the crash when hovering a name', description: 'Rest the mouse on a variable to see what it held when the program crashed.', type: 'boolean', default: true },
   ],
   activate(api) {
@@ -56,15 +57,26 @@ export default {
       }
       view.dispatch({ effects: setMark.of(deco) });
     };
-    const sameFile = (c, doc) => doc && (c.doc === doc || c.report.file === doc.name);
+    // Where the crash happened: the program itself, or a file it brought in with IMPORT or LOAD.
+    const norm = (p) => (p || '').replace(/\\/g, '/').replace(/^([a-z]):/i, (m, d) => d.toLowerCase() + ':');
+    const crashPath = (c) => c.report.path || (c.doc?.path ? c.doc.path.replace(/[^\\/]*$/, '') + c.report.file : null);
+    const sameFile = (c, doc) => {
+      if (!doc) return false;
+      if (doc.path && crashPath(c)) return norm(doc.path) === norm(crashPath(c));
+      return c.doc === doc && c.report.file === doc.name;
+    };
+    // Crash-time values make sense in the program and in the file that crashed.
+    const inProgram = (c, doc) => sameFile(c, doc) || c.doc === doc;
 
     api.events.on('crash', ({ report, doc }) => {
       last = { report, doc };
       render();
       api.layout.setBadge('crash', '!', 'error');
       if (api.settings.get('autoShow')) api.layout.showPanel('crash', { focus: false });
-      if (doc && api.workspace.active !== doc && report.file === doc.name) api.workspace.openFile(doc.path);
-      setTimeout(mark, 30);
+      const where = crashPath(last);
+      if (where && api.settings.get('openFile') && !sameFile(last, api.workspace.active)) {
+        api.workspace.openFile(where).then(() => setTimeout(mark, 30));
+      } else setTimeout(mark, 30);
     });
     api.events.on('run-start', () => {
       api.layout.setBadge('crash', '');
@@ -74,16 +86,23 @@ export default {
     api.settings.onChange('markLine', mark);
     api.onDispose(() => api.editor.view.dispatch({ effects: setMark.of(Decoration.none) }));
 
-    const goTo = async (line) => {
+    const goTo = async (line, path = crashPath(last)) => {
       if (!last) return;
-      if (last.doc && last.report.file === last.doc.name && api.workspace.active !== last.doc) await api.workspace.openFile(last.doc.path);
-      else if (last.doc?.path && last.report.file !== last.doc.name) {
-        // The crash happened in an imported file next to the program.
-        const dir = last.doc.path.replace(/[\\/][^\\/]*$/, '');
-        const sep = last.doc.path.includes('\\') ? '\\' : '/';
-        await api.workspace.openFile(dir + sep + last.report.file);
-      }
+      if (path && norm(api.workspace.active?.path) !== norm(path)) await api.workspace.openFile(path);
       api.editor.goTo(line, 1, { select: true });
+    };
+
+    // Long values are folded to a few lines; click to see all of it, or copy it.
+    const value = (text) => {
+      const code = h('code', text);
+      const cell = h('div.value-cell', code);
+      if (text.length > 160 || text.includes('\n')) {
+        cell.classList.add('folded');
+        cell.append(h('div.value-tools',
+          h('button.link', { on: { click: (e) => { cell.classList.toggle('folded'); e.target.textContent = cell.classList.contains('folded') ? 'Show all' : 'Show less'; } } }, 'Show all'),
+          h('button.link', { on: { click: () => navigator.clipboard.writeText(text).then(() => api.ui.toast('Copied', { timeout: 1200 })) } }, 'Copy')));
+      }
+      return cell;
     };
 
     // ---------- the panel ----------
@@ -109,7 +128,7 @@ export default {
             rows.length
               ? h('table.var-table',
                 h('thead', h('tr', h('th', 'Name'), h('th', 'Value'), h('th', 'Type'))),
-                h('tbody', rows.map((v) => h('tr', h('td.var-name', v.name), h('td.var-value', h('code', v.value)), h('td.var-type', v.type)))))
+                h('tbody', rows.map((v) => h('tr', h('td.var-name', v.name), h('td.var-value', value(v.value)), h('td.var-type', v.type)))))
               : h('p.view-note', q ? 'No matches' : 'No variables')));
         }
       };
@@ -124,7 +143,7 @@ export default {
           h('button.link.crash-where', { on: { click: () => goTo(r.line) } }, `${r.file}, line ${r.line}`)),
         r.frames.length ? h('div.crash-calls',
           h('h4', 'Function calls (innermost first)'),
-          h('ol', r.frames.map((f) => h('li', h('button.link', { on: { click: () => goTo(f.line) } }, `${f.name}()`), h('span.muted', ` line ${f.line}`))))) : null,
+          h('ol', r.frames.map((f) => h('li', h('button.link', { on: { click: () => goTo(f.line, f.path || crashPath(last)) } }, `${f.name}()`), h('span.muted', ` line ${f.line}${f.path && norm(f.path) !== norm(crashPath(last)) ? ' in ' + f.path.split(/[\\/]/).pop() : ''}`))))) : null,
         r.traced ? h('div.crash-vars-wrap', search, tables) : h('p.view-note', 'This is a syntax error, so the program never started and there are no variables to show.'),
       );
     };
@@ -141,7 +160,7 @@ export default {
 
     // ---------- values on hover ----------
     api.language.addHover(({ word, op }) => {
-      if (!last || !word || op || !api.settings.get('hoverValues') || !sameFile(last, api.workspace.active)) return null;
+      if (!last || !word || op || !api.settings.get('hoverValues') || !inProgram(last, api.workspace.active)) return null;
       if (!/^[a-z_][a-z0-9_]*$/.test(word.text)) return null;
       const r = last.report;
       for (const g of [...r.frames.map((f) => ({ where: `in ${f.name}()`, vars: f.vars })), { where: 'outside functions', vars: r.outside }]) {

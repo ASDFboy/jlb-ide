@@ -22,12 +22,52 @@ export class Workspace {
     s.define({ key: 'workspace.openFiles', type: 'text', default: '[]', hidden: true });
     s.define({ key: 'workspace.activeFile', type: 'text', default: '', hidden: true });
     s.define({ key: 'workspace.recent', type: 'text', default: '[]', hidden: true });
+    s.define({ key: 'workspace.recentFiles', type: 'text', default: '[]', hidden: true });
 
     this.windowsSetup();
     this.welcome = h('div.welcome');
     ide.layout.editorHost.append(this.welcome);
     ide.events.on('editor-change', () => this.onEdit());
+    ide.events.on('active-change', () => this.renderCrumbs());
+    ide.events.on('folder-change', () => this.renderCrumbs());
     window.addEventListener('focus', () => this.checkOutside());
+
+    // The list of every open file, for when the tabs don't all fit.
+    this.tabsMenuBtn = h('button.icon-btn.tabs-menu', { title: 'All open files', 'aria-label': 'All open files', on: { click: (e) => this.tabsMenu(e) } }, icon('chevron-down', 16));
+    ide.layout.tabsEnd.append(this.tabsMenuBtn);
+  }
+
+  /** The current file's place in the folder, in the toolbar. */
+  renderCrumbs() {
+    const el = clear(this.ide.layout.crumbs);
+    const doc = this.active;
+    if (!doc) return;
+    const parts = doc.path ? relative(this.folder, doc.path).split(/[\\/]/) : [doc.name];
+    const outside = doc.path && !(this.folder && doc.path.startsWith(this.folder));
+    el.title = doc.path || 'Not saved yet';
+    if (outside) el.append(h('span.crumb.muted', dirname(doc.path)), h('span.crumb-sep', '/'));
+    else if (doc.path && this.folder) el.append(h('span.crumb.muted', basename(this.folder)), h('span.crumb-sep', '/'));
+    parts.forEach((p, i) => {
+      el.append(h(`span.crumb${i === parts.length - 1 ? '.current' : '.muted'}`, p));
+      if (i < parts.length - 1) el.append(h('span.crumb-sep', '/'));
+    });
+    if (!doc.path) el.append(h('span.crumb-note', 'not saved yet'));
+  }
+
+  tabsMenu(e) {
+    if (!this.docs.length) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    contextMenu({ preventDefault() {}, clientX: r.right - 220, clientY: r.bottom + 2 }, this.docs.map((d) => ({
+      label: (this.isDirty(d === this.active ? { state: this.ide.editor.view.state, saved: d.saved } : d) ? '● ' : '') + d.name + (d === this.active ? '  (open)' : ''),
+      run: () => this.activate(d),
+    })));
+  }
+
+  rememberFile(path) {
+    if (!path) return;
+    const list = JSON.parse(this.ide.settings.get('workspace.recentFiles') || '[]').filter((r) => !same(r, path));
+    list.unshift(path);
+    this.ide.settings.set('workspace.recentFiles', JSON.stringify(list.slice(0, 10)));
   }
 
   /** Windows: right-click "Edit with JLB IDE" for .jlb files. */
@@ -94,6 +134,7 @@ export class Workspace {
     doc.mtime = (await invoke('path_info', { path })).modified;
     if (activate) this.activate(doc);
     else this.renderTabs();
+    if (!this.restoring) this.rememberFile(path);
     this.ide.events.emit('file-open', doc);
     this.saveSession();
     return doc;
@@ -176,6 +217,8 @@ export class Workspace {
     if (other && other !== doc) this.closeNow(other);
     doc.path = path;
     doc.name = basename(path);
+    this.rememberFile(path);
+    this.renderCrumbs();
     const ok = await this.save(doc);
     this.refreshExplorer();
     this.saveSession();
@@ -261,6 +304,7 @@ export class Workspace {
       const dirty = this.isDirty(d === this.active ? { state: this.ide.editor.view.state, saved: d.saved } : d);
       const tab = h(`div.tab${d === this.active ? '.active' : ''}${dirty ? '.dirty' : ''}`, {
         role: 'tab',
+        draggable: 'true',
         title: d.path || 'Not saved yet',
         'aria-selected': d === this.active ? 'true' : 'false',
         tabindex: d === this.active ? '0' : '-1',
@@ -272,6 +316,34 @@ export class Workspace {
             }
           },
           click: () => this.activate(d),
+          dragstart: (e) => {
+            this.dragTab = d;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', d.name);
+          },
+          dragend: () => {
+            this.dragTab = null;
+            bar.querySelectorAll('.drop-before, .drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+          },
+          dragover: (e) => {
+            if (!this.dragTab || this.dragTab === d) return;
+            e.preventDefault();
+            const r = tab.getBoundingClientRect();
+            const after = e.clientX > r.left + r.width / 2;
+            tab.classList.toggle('drop-after', after);
+            tab.classList.toggle('drop-before', !after);
+          },
+          dragleave: () => tab.classList.remove('drop-before', 'drop-after'),
+          drop: (e) => {
+            e.preventDefault();
+            const moving = this.dragTab;
+            if (!moving || moving === d) return;
+            const after = tab.classList.contains('drop-after');
+            this.docs.splice(this.docs.indexOf(moving), 1);
+            this.docs.splice(this.docs.indexOf(d) + (after ? 1 : 0), 0, moving);
+            this.renderTabs();
+            this.saveSession();
+          },
           contextmenu: (e) => contextMenu(e, [
             { label: 'Close', run: () => this.close(d) },
             { label: 'Close others', run: async () => { for (const o of this.docs.filter((x) => x !== d)) if (!(await this.close(o))) break; } },
@@ -285,6 +357,7 @@ export class Workspace {
       bar.append(tab);
     }
     bar.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (this.tabsMenuBtn) this.tabsMenuBtn.hidden = this.docs.length < 2;
   }
 
   // ---------- folder ----------
@@ -345,10 +418,99 @@ export class Workspace {
       return;
     }
     this.expanded ||= new Set([this.folder]);
-    el.append(h('div.tree-root', { title: this.folder }, basename(this.folder)));
-    const tree = h('div.tree', { role: 'tree' });
+    const focused = document.activeElement?.closest?.('.tree-row')?.dataset.path;
+    const root = { name: basename(this.folder), path: this.folder, is_dir: true };
+    el.append(h('div.tree-root', {
+      title: this.folder,
+      on: {
+        dragover: (ev) => this.dragOver(ev, root, ev.currentTarget),
+        dragleave: (ev) => ev.currentTarget.classList.remove('drop-into'),
+        drop: (ev) => this.dropOn(ev, root),
+      },
+    }, basename(this.folder)));
+    const tree = h('div.tree', { role: 'tree', 'aria-label': 'Files', on: { keydown: (ev) => this.treeKey(ev) } });
     el.append(tree);
     await this.renderDir(tree, this.folder, 0);
+    // One row is reachable with Tab; the arrow keys move between rows from there.
+    const first = tree.querySelector('.tree-row.active') || tree.querySelector('.tree-row');
+    if (first) first.tabIndex = 0;
+    tree.addEventListener('focusin', (ev) => {
+      if (!ev.target.classList.contains('tree-row')) return;
+      tree.querySelectorAll('.tree-row[tabindex="0"]').forEach((r) => (r.tabIndex = -1));
+      ev.target.tabIndex = 0;
+    });
+    const again = focused && [...tree.querySelectorAll('.tree-row')].find((r) => r.dataset.path === focused);
+    if (again) again.focus();
+  }
+
+  // Dragging files and folders onto a folder moves them there.
+  dragOver(ev, target, el) {
+    if (!this.dragEntry || !target.is_dir) return;
+    const from = this.dragEntry.path;
+    if (same(dirname(from), target.path) || same(from, target.path) || target.path.startsWith(from + '/') || target.path.startsWith(from + '\\')) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'move';
+    el.classList.add('drop-into');
+  }
+
+  async dropOn(ev, target) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drop-into');
+    const e = this.dragEntry;
+    this.dragEntry = null;
+    if (!e || !target.is_dir) return;
+    await this.movePath(e, join(target.path, e.name));
+    this.expanded.add(target.path);
+    this.refreshExplorer();
+  }
+
+  /** Moves or renames a file or folder, keeping open tabs pointing at it. */
+  async movePath(e, to) {
+    try {
+      await invoke('rename_path', { from: e.path, to });
+    } catch (err) {
+      toast(String(err), { kind: 'error' });
+      return false;
+    }
+    for (const d of this.docs) {
+      if (d.path && (same(d.path, e.path) || d.path.startsWith(e.path + '/') || d.path.startsWith(e.path + '\\'))) {
+        d.path = to + d.path.slice(e.path.length);
+        d.name = basename(d.path);
+      }
+    }
+    this.renderTabs();
+    this.renderCrumbs();
+    this.saveSession();
+    return true;
+  }
+
+  /** Arrow keys move through the tree; Right/Left open and close folders. */
+  treeKey(ev) {
+    const rows = [...this.treeEl.querySelectorAll('.tree-row')];
+    const i = rows.indexOf(document.activeElement);
+    if (i < 0) return;
+    const row = rows[i];
+    const entry = row.entry;
+    const focus = (r) => r && (r.focus(), r.scrollIntoView({ block: 'nearest' }));
+    switch (ev.key) {
+      case 'ArrowDown': focus(rows[i + 1]); break;
+      case 'ArrowUp': focus(rows[i - 1]); break;
+      case 'Home': focus(rows[0]); break;
+      case 'End': focus(rows[rows.length - 1]); break;
+      case 'ArrowRight':
+        if (entry.is_dir && !this.expanded.has(entry.path)) this.treeClick(entry);
+        else if (entry.is_dir) focus(rows[i + 1]);
+        break;
+      case 'ArrowLeft':
+        if (entry.is_dir && this.expanded.has(entry.path)) this.treeClick(entry);
+        else focus(rows.slice(0, i).reverse().find((r) => r.entry.is_dir && same(r.entry.path, dirname(entry.path))));
+        break;
+      case 'Enter': case ' ': this.treeClick(entry); break;
+      case 'F2': this.renamePath(entry); break;
+      case 'Delete': this.deletePath(entry); break;
+      default: return;
+    }
+    ev.preventDefault();
   }
 
   async renderDir(container, dir, depth) {
@@ -364,19 +526,34 @@ export class Workspace {
       const open = e.is_dir && this.expanded.has(e.path);
       const row = h(`div.tree-row${e.is_dir ? '.dir' : ''}${!e.is_dir && same(e.path, this.active?.path) ? '.active' : ''}${!e.is_dir && !e.name.endsWith('.jlb') ? '.other' : ''}`, {
         role: 'treeitem',
-        tabindex: '0',
+        tabindex: '-1',
         title: e.path,
+        draggable: 'true',
         style: { paddingLeft: 8 + depth * 14 + 'px' },
         'aria-expanded': e.is_dir ? String(open) : undefined,
+        'aria-level': String(depth + 1),
         on: {
           click: () => this.treeClick(e),
-          keydown: (ev) => ev.key === 'Enter' && this.treeClick(e),
           contextmenu: (ev) => this.treeMenu(ev, e),
+          dragstart: (ev) => {
+            this.dragEntry = e;
+            ev.dataTransfer.effectAllowed = 'move';
+            ev.dataTransfer.setData('text/plain', e.path);
+          },
+          dragend: () => {
+            this.dragEntry = null;
+            this.treeEl?.querySelectorAll('.drop-into').forEach((x) => x.classList.remove('drop-into'));
+          },
+          dragover: (ev) => this.dragOver(ev, e, row),
+          dragleave: () => row.classList.remove('drop-into'),
+          drop: (ev) => this.dropOn(ev, e),
         },
       },
       e.is_dir ? h(`span.twisty${open ? '.open' : ''}`, icon('chevron', 14)) : h('span.twisty'),
       icon(e.is_dir ? (open ? 'folder-open' : 'folder') : 'file', 16),
       h('span.tree-name', e.name));
+      row.entry = e;
+      row.dataset.path = e.path;
       container.append(row);
       if (open) {
         const kids = h('div', { role: 'group' });
@@ -440,21 +617,7 @@ export class Workspace {
     const dot = e.name.lastIndexOf('.');
     const name = await prompt(`Rename ${e.name}`, { value: e.name, ok: 'Rename', select: [0, dot > 0 && !e.is_dir ? dot : e.name.length] });
     if (!name || name === e.name) return;
-    const to = join(dirname(e.path), name);
-    try {
-      await invoke('rename_path', { from: e.path, to });
-    } catch (err) {
-      return toast(String(err), { kind: 'error' });
-    }
-    for (const d of this.docs) {
-      if (d.path && (same(d.path, e.path) || d.path.startsWith(e.path + '/') || d.path.startsWith(e.path + '\\'))) {
-        d.path = to + d.path.slice(e.path.length);
-        d.name = basename(d.path);
-      }
-    }
-    this.renderTabs();
-    this.refreshExplorer();
-    this.saveSession();
+    if (await this.movePath(e, join(dirname(e.path), name))) this.refreshExplorer();
   }
 
   async deletePath(e) {
@@ -467,7 +630,7 @@ export class Workspace {
     } catch (err) {
       return toast(String(err), { kind: 'error' });
     }
-    for (const d of [...this.docs]) if (d.path && (same(d.path, e.path) || d.path.startsWith(e.path))) this.closeNow(d);
+    for (const d of [...this.docs]) if (d.path && (same(d.path, e.path) || d.path.startsWith(e.path + '/') || d.path.startsWith(e.path + '\\'))) this.closeNow(d);
     this.refreshExplorer();
   }
 
@@ -476,6 +639,7 @@ export class Workspace {
   renderWelcome() {
     const w = clear(this.welcome);
     const recent = JSON.parse(this.ide.settings.get('workspace.recent') || '[]');
+    const recentFiles = JSON.parse(this.ide.settings.get('workspace.recentFiles') || '[]').slice(0, 6);
     const cmd = (id) => () => this.ide.commands.run(id);
     w.append(
       h('div.welcome-inner',
@@ -485,6 +649,9 @@ export class Workspace {
           h('button.btn.primary', { on: { click: cmd('file.new') } }, icon('plus', 16), 'New file'),
           h('button.btn', { on: { click: cmd('file.open') } }, icon('file', 16), 'Open file'),
           h('button.btn', { on: { click: cmd('file.openFolder') } }, icon('folder-open', 16), 'Open folder')),
+        recentFiles.length ? h('section.welcome-section',
+          h('h2', 'Recent files'),
+          h('ul.welcome-list', recentFiles.map((r) => h('li', h('button.link', { title: r, on: { click: () => this.openFile(r) } }, basename(r), h('span.muted', ' ' + dirname(r))))))) : null,
         recent.length ? h('section.welcome-section',
           h('h2', 'Recent folders'),
           h('ul.welcome-list', recent.map((r) => h('li', h('button.link', { title: r, on: { click: () => this.setFolder(r) } }, basename(r), h('span.muted', ' ' + r)))))) : null,

@@ -57,6 +57,7 @@ const ICONS = {
   alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
+  'chevron-down': '<path d="M6 9l6 6 6-6"/>',
   search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
   terminal: '<path d="M4 5h16v14H4z"/><path d="M8 10l3 2-3 2M13 15h4"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.5M4 12h.5M4 18h.5"/>',
