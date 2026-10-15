@@ -101,6 +101,30 @@ const commands = {
   async stop_program({ id }) {
     runs.get(id)?.kill();
   },
+  async run_capture({ interpreter, file, cwd, args, input, timeout_ms }) {
+    if (!fss.existsSync(interpreter)) throw `couldn't find the interpreter at ${interpreter} (check Settings → Interpreters)`;
+    return new Promise((resolve) => {
+      const start = performance.now();
+      const c = spawn(interpreter, [...(args || []), file], { cwd: cwd || undefined });
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+      c.stdout.setEncoding('utf8');
+      c.stderr.setEncoding('utf8');
+      c.stdout.on('data', (d) => (stdout += d));
+      c.stderr.on('data', (d) => (stderr += d));
+      const timer = setTimeout(() => {
+        timedOut = true;
+        c.kill();
+      }, timeout_ms);
+      c.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ stdout, stderr, code: timedOut ? null : code, ms: performance.now() - start, timed_out: timedOut });
+      });
+      c.stdin.on('error', () => {});
+      c.stdin.end(input || '');
+    });
+  },
   async check_code({ interpreter, source }) {
     return new Promise((resolve, reject) => {
       const c = spawn(interpreter, ['--check', '-']);
@@ -258,7 +282,7 @@ const commands = {
     if (folder !== backupSession) await fs.rm(path.join(backupRoot(), plainName(folder)), { recursive: true, force: true });
   },
   async find_interpreters() {
-    const c = process.env.JLB_C_PATH;
+    const c = process.env.JLB_C_PATH || path.resolve('src-tauri/interpreters', exe('jlb-c'));
     return { rust: fss.existsSync(jlbPath) ? jlbPath : null, c: c && fss.existsSync(c) ? c : null };
   },
   async app_info() {
