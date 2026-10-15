@@ -959,6 +959,19 @@ test('renames a name everywhere it means the same thing', async () => {
   await page.keyboard.press('Control+z');
   assert.equal(await tabText('ren/main.jlb'), main);
 
+  // A loop name can take a name that's only used outside its loop.
+  await cursorOn(11, 'count2');
+  await page.keyboard.press('F2');
+  await answerPrompt('count');
+  await page.waitForSelector('.toast:has-text("Renamed count2 to count in 2 places")');
+  await page.keyboard.press('Control+z');
+  // But a local can't take the name of an input of its function.
+  await cursorOn(6, 'temp');
+  await page.keyboard.press('F2');
+  await answerPrompt('n');
+  await page.waitForSelector('.dialog:has-text("n is already used in")');
+  await page.click('.dialog-buttons button:has-text("Cancel")');
+
   // A POINT and its GOTO.
   await cursorOn(13, 'again');
   await page.keyboard.press('F2');
@@ -1086,6 +1099,21 @@ test('formats a file, the selected lines, and on save when asked', async () => {
   assert.equal(fs.readFileSync(file, 'utf8'), 'x = 1\nFUNC f(a) {\n    RETURN a * 2 }\n');
   assert.equal(await tabText('messy.jlb'), 'x = 1\nFUNC f(a) {\n    RETURN a * 2 }\n');
   await page.evaluate(() => window.jlbIde.settings.set('format.onSave', false));
+});
+
+test('a program printing a lot keeps the window responsive and shows the end', async () => {
+  const file = path.join(proj, 'lots.jlb');
+  fs.writeFileSync(file, 'i = 0\nWHILE i < 20000 {\n    i += 1\n    PRINT("line", i)\n}\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.waitForSelector('.tab.active:has-text("lots.jlb")');
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.out-line:has-text("Finished")', { timeout: 30000 });
+  const { lines, last } = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.out-line')];
+    return { lines: rows.length, last: rows.at(-2).textContent };
+  });
+  assert.ok(lines <= 5001, `${lines} lines kept`);
+  assert.equal(last, 'line 20000');
 });
 
 test('no errors in the page', () => {

@@ -6,12 +6,15 @@ import { invoke, listen, pickOpen } from './backend.js';
 import { showKey } from './commands.js';
 
 const MARK = '\u001e';
-const MAX_OUTPUT = 400_000;
+const MAX_OUTPUT = 400_000; // characters kept in the Output panel
+const MAX_LINES = 5000; // and lines
 
 export class Runner {
   constructor(ide) {
     this.ide = ide;
     this.interpreters = new Map();
+    this.outLen = 0; // characters in the Output panel
+    this.outQueue = ''; // program output waiting to be shown
     this.found = { rust: null, c: null };
     this.run_ = null; // { id, doc, start, stderrLine }
     // Output can arrive before run_program has answered; it waits here until then.
@@ -196,7 +199,7 @@ export class Runner {
       return;
     }
     if (stream === 'out') {
-      this.write(text, 'out');
+      this.queueOut(text);
     } else {
       // Error output arrives in pieces; the crash report's JSON line is for the IDE, not the person.
       r.stderrLine += text;
@@ -238,8 +241,42 @@ export class Runner {
     }
   }
 
+  /**
+   * Program output is gathered and shown a few times a second, so a program printing
+   * thousands of lines can't swamp the window. Anything else written shows it first.
+   */
+  queueOut(text) {
+    this.outQueue = (this.outQueue || '') + text;
+    // Older output would be trimmed off anyway.
+    if (this.outQueue.length > MAX_OUTPUT) this.outQueue = this.outQueue.slice(-MAX_OUTPUT);
+    // Waits longer after a slow update, so the window always has time to respond.
+    this.outTimer ||= setTimeout(() => this.flushOut(), Math.max(40, (this.flushCost || 0) * 4));
+  }
+
+  flushOut() {
+    clearTimeout(this.outTimer);
+    this.outTimer = null;
+    let q = this.outQueue;
+    if (!q) return;
+    this.outQueue = '';
+    // So much new output that everything shown now would be trimmed off anyway:
+    // show just the end of it.
+    let cut = q.length;
+    for (let n = 0; n <= MAX_LINES && cut > 0; n++) cut = q.lastIndexOf('\n', cut - 1);
+    if (cut > 0) q = q.slice(cut + 1);
+    if ((cut > 0 || q.length >= MAX_OUTPUT) && this.outEl) {
+      clear(this.outEl);
+      this.outLen = 0;
+      this.lastLine = null;
+    }
+    const t0 = performance.now();
+    this.write(q, 'out');
+    this.flushCost = performance.now() - t0;
+  }
+
   /** Writes an error line with its "line N" parts as links to the code. */
   writeLinked(line, kind) {
+    this.flushOut();
     // "ERROR in helpers.jlb, line 4" names a file; "f()  line 3" is in the program itself.
     const re = /\bin ([^,]+?\.jlb), line (\d+)|\bline (\d+)/g;
     let last = 0;
@@ -259,6 +296,7 @@ export class Runner {
         return l;
       })();
       this.lastLine.append(h('button.out-link', { title: 'Go to this line', on: { click: () => this.goToLine(file, n, func) } }, text));
+      this.outLen += text.length;
       last = start + text.length;
     }
     this.write(line.slice(last), kind);
@@ -301,6 +339,7 @@ export class Runner {
 
   offerSetup(it) {
     if (!it) return;
+    this.flushOut();
     this.lastLine = null;
     const line = h('div.out-line',
       h('button.link', { on: { click: () => this.pickInterpreter(it.id) } }, `Choose the ${it.name} interpreter program…`));
@@ -348,8 +387,10 @@ export class Runner {
   }
 
   clearOutput() {
+    this.outQueue = '';
     if (!this.outEl) return;
     clear(this.outEl);
+    this.outLen = 0;
     this.lastLine = null;
     if (!this.run_) this.empty();
   }
@@ -357,6 +398,7 @@ export class Runner {
   /** Adds text to the output. A line that didn't end (like an INPUT prompt) is continued. */
   write(text, kind) {
     if (!this.outEl) return;
+    if (this.outQueue && kind !== 'out') this.flushOut();
     this.outEl.querySelector('.out-empty')?.remove();
     const stick = this.outEl.scrollTop + this.outEl.clientHeight >= this.outEl.scrollHeight - 30;
     const parts = text.split('\n');
@@ -368,6 +410,7 @@ export class Runner {
         this.outEl.append(this.lastLine);
       }
       if (!part) return;
+      this.outLen += part.length;
       const last = this.lastLine.lastChild;
       if (last && last.dataset.kind === kind) last.append(part);
       else {
@@ -385,12 +428,13 @@ export class Runner {
     this.write(text + '\n', 'sys' + (tone ? ` ${tone}` : ''));
   }
 
+  /** Drops the oldest lines past MAX_LINES or MAX_OUTPUT characters (counted as they're added). */
   trim() {
-    let total = this.outEl.textContent.length;
-    while (total > MAX_OUTPUT && this.outEl.firstChild) {
-      total -= this.outEl.firstChild.textContent.length;
+    while ((this.outLen > MAX_OUTPUT || this.outEl.childElementCount > MAX_LINES) && this.outEl.firstChild) {
+      this.outLen -= this.outEl.firstChild.textContent.length;
       this.outEl.firstChild.remove();
     }
+    if (!this.outEl.firstChild) this.outLen = 0;
   }
 
   setInputEnabled(on) {

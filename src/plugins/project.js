@@ -6,6 +6,13 @@ import { same, basename, relative } from '../core/paths.js';
 import { fileKey } from './linked.js';
 
 const disk = new Map(); // key -> { modified, text } (text is null for files that aren't text)
+let listing = null; // the folder's last listing: { folder, at, files, truncated }
+const LISTING_AGE = 3000; // ms a listing is reused, so live searching doesn't walk the folder on every edit
+
+/** Forgets the folder's listing, after files were added, saved, moved or deleted. */
+export function forgetListing() {
+  listing = null;
+}
 
 /**
  * The folder's files plus any open tab outside it:
@@ -15,11 +22,14 @@ export async function projectFiles(api, { limit } = {}) {
   const folder = api.workspace.folder;
   let listed = [];
   let truncated = false;
-  if (folder) {
+  if (folder && listing?.folder === folder && Date.now() - listing.at < LISTING_AGE) {
+    ({ files: listed, truncated } = listing);
+  } else if (folder) {
     try {
       const r = await api.invoke('list_files', { root: folder, limit });
       listed = r.files;
       truncated = r.truncated;
+      listing = { folder, at: Date.now(), files: listed, truncated };
     } catch (e) {
       console.warn('[project] could not list the folder', e);
     }
@@ -102,6 +112,7 @@ export async function applyChanges(api, list, { message }) {
       }
     }
   }
+  if (done.some((d) => !d.doc)) forgetListing();
   const { h, toast } = api.ui;
   const note = skipped.length ? ` ${skipped.length} file${skipped.length > 1 ? 's' : ''} changed meanwhile and ${skipped.length > 1 ? 'were' : 'was'} left alone: ${skipped.map((f) => f.name).join(', ')}.` : '';
   if (done.length) {

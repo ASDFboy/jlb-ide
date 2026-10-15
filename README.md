@@ -154,7 +154,7 @@ Then open <http://127.0.0.1:5180>. `npm run dev:web` rebuilds on every change. T
 
 ### Tests
 
-`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, find in files, renaming, folding and bracket colors, formatting, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`).
+`npm test` drives the whole interface in a real browser against the real interpreters: running programs with input, stopping them, crash reports, every kind of mistake check, hovers, suggestions, following IMPORT and LOAD, find in files, renaming, folding and bracket colors, formatting, Quick-try, the debugger, the table viewer, comparing and tests, go to definition, switching features off in Settings, plugins, backups and saving. It needs Chromium for Playwright (`npx playwright-core install chromium`, or set `CHROMIUM_PATH`). `scripts/selftest.sh` then checks the real desktop app itself (a debug build, on a virtual screen if needed): listing and reading files, running programs with both interpreters, a program printing nonstop, Search, Tests and Compare.
 
 ## How it works
 

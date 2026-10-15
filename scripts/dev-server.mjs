@@ -124,11 +124,40 @@ const commands = {
     };
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (text) => emit('run-output', { id, stream: 'out', text }));
-    child.stderr.on('data', (text) => emit('run-output', { id, stream: 'err', text }));
+    // Like the app: output is gathered and sent at most every 30 ms, and program output
+    // that piles up past 1 MB loses its oldest part (error output never does).
+    const pump = (stream) => {
+      let buf = '';
+      let timer = null;
+      let last = 0;
+      const send = () => {
+        timer = null;
+        if (!buf) return;
+        emit('run-output', { id, stream, text: buf });
+        buf = '';
+        last = Date.now();
+      };
+      return {
+        add(text) {
+          buf += text;
+          if (stream === 'out' && buf.length > 1 << 20) buf = buf.slice(-(1 << 19));
+          timer ||= setTimeout(send, Math.max(0, last + 30 - Date.now()));
+        },
+        flush() {
+          clearTimeout(timer);
+          send();
+        },
+      };
+    };
+    const out = pump('out');
+    const err = pump('err');
+    child.stdout.on('data', (text) => out.add(text));
+    child.stderr.on('data', (text) => err.add(text));
     child.stdout.on('end', done);
     child.stderr.on('end', done);
     child.on('close', (code) => {
+      out.flush();
+      err.flush();
       runs.delete(id);
       emit('run-exit', { id, code });
     });

@@ -12,6 +12,13 @@ import { dirname, same, basename } from '../core/paths.js';
 
 const files = new Map(); // key -> { path, text, info, stamp }
 const results = new Map(); // key of a file -> its last linked() result
+const looked = new Map(); // key -> { at, entry }: when a file on disk was last looked at
+const RECHECK_MS = 2000;
+
+/** Forgets when files were last looked at, so the next check reads them again (after a save). */
+export function forgetLooked() {
+  looked.clear();
+}
 
 /** A path that compares equal however it was written (Windows paths ignore case). */
 export function fileKey(p) {
@@ -47,6 +54,15 @@ async function read(api, path) {
     files.set(k, entry);
     return entry;
   }
+  // Checks run as you type, so a file on disk is looked at again at most every few seconds.
+  const seen = looked.get(k);
+  if (seen && Date.now() - seen.at < RECHECK_MS) return seen.entry;
+  const entry = await readDisk(api, path, cached);
+  looked.set(k, { at: Date.now(), entry });
+  return entry;
+}
+
+async function readDisk(api, path, cached) {
   let st;
   try {
     st = await api.invoke('path_info', { path });
@@ -62,7 +78,7 @@ async function read(api, path) {
     return null;
   }
   const entry = { path, text, info: scan(text), stamp: st.modified };
-  files.set(k, entry);
+  files.set(fileKey(path), entry);
   return entry;
 }
 

@@ -1,7 +1,7 @@
 // Find in files: search every file in the folder (and the open tabs, with their
 // unsaved changes), see each match in its line, and replace them all at once.
 
-import { projectFiles, readAll, applyChanges } from './project.js';
+import { projectFiles, readAll, applyChanges, forgetListing } from './project.js';
 import { basename, dirname } from '../core/paths.js';
 
 export default {
@@ -151,7 +151,7 @@ export default {
         for (const mt of g.matches) {
           const lineText = lines[mt.line - 1];
           // A bit of the line before the match, so it starts close to it.
-          let start = Math.max(0, mt.from - 14);
+          let start = Math.max(0, mt.from - 10);
           while (start < mt.from && /\s/.test(lineText[start])) start++;
           const lead = (start > 0 ? '…' : '') + lineText.slice(start, mt.from);
           const found = lineText.slice(mt.from, mt.to);
@@ -160,7 +160,7 @@ export default {
           const with$ = showReplace ? expand$(rep, mt, S.get('regex')) : '';
           const parts = showReplace ? [h('del', found), with$ ? h('ins', with$) : null] : [h('mark', found)];
           ul.append(h('li', h('button.sr-line', {
-            title: `Line ${mt.line}`,
+            title: `Line ${mt.line}: ${lineText.trim().slice(0, 300)}`,
             on: { click: () => openAt(g.file, mt) },
           }, h('span.sr-text', lead, ...parts, tail), h('span.sr-ln', String(mt.line)))));
         }
@@ -215,8 +215,12 @@ export default {
     };
     api.events.on('editor-change', refresh);
     api.events.on('doc-change', refresh);
-    api.events.on('file-save', refresh);
+    api.events.on('file-save', () => {
+      forgetListing(); // it may be a new file
+      refresh();
+    });
     api.events.on('folder-change', () => {
+      forgetListing();
       if (query.value) later(0);
       else render();
     });
@@ -228,7 +232,7 @@ export default {
       icon: 'search',
       order: 15,
       actions: [
-        { icon: 'refresh', title: 'Search again', run: () => later(0) },
+        { icon: 'refresh', title: 'Search again', run: () => { forgetListing(); later(0); } },
         { icon: 'list', title: 'Fold or unfold all files', run: () => {
           const groups = results?.groups || [];
           const all = groups.every((g) => collapsed.has(g.file.path || g.file.name));

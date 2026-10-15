@@ -28,8 +28,14 @@ async function bridgeCall(cmd, args) {
   return body.result;
 }
 
+/**
+ * Calls a native command. Arguments are written like the Rust side names them
+ * (timeout_ms); Tauri wants them in camelCase (timeoutMs), so they're changed here.
+ */
 export function invoke(cmd, args) {
-  return inTauri ? tauriInvoke(cmd, args) : bridgeCall(cmd, args);
+  if (!inTauri) return bridgeCall(cmd, args);
+  const named = args && Object.fromEntries(Object.entries(args).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]));
+  return tauriInvoke(cmd, named);
 }
 
 export async function listen(event, fn) {
