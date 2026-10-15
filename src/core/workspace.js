@@ -58,7 +58,7 @@ export class Workspace {
     if (!this.docs.length) return;
     const r = e.currentTarget.getBoundingClientRect();
     contextMenu({ preventDefault() {}, clientX: r.right - 220, clientY: r.bottom + 2 }, this.docs.map((d) => ({
-      label: (this.isDirty(d === this.active ? { state: this.ide.editor.view.state, saved: d.saved } : d) ? '● ' : '') + d.name + (d === this.active ? '  (open)' : ''),
+      label: (this.isDirty(d) ? '● ' : '') + d.name + (d === this.active ? '  (open)' : ''),
       run: () => this.activate(d),
     })));
   }
@@ -95,7 +95,19 @@ export class Workspace {
   // ---------- documents ----------
 
   isDirty(doc) {
-    return !doc.state.doc.eq(doc.saved);
+    const state = doc === this.active && this.docs.includes(doc) ? this.ide.editor.view.state : doc.state;
+    return !state.doc.eq(doc.saved);
+  }
+
+  /** Replaces a tab's text (as an edit, so it can be undone and shows as unsaved). */
+  setText(doc, text) {
+    if (doc === this.active) {
+      const v = this.ide.editor.view;
+      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: text } });
+    } else {
+      doc.state = doc.state.update({ changes: { from: 0, to: doc.state.doc.length, insert: text } }).state;
+      this.renderTabs();
+    }
   }
 
   createDoc(text, path) {
@@ -301,7 +313,7 @@ export class Workspace {
     const bar = this.ide.layout.tabs;
     clear(bar);
     for (const d of this.docs) {
-      const dirty = this.isDirty(d === this.active ? { state: this.ide.editor.view.state, saved: d.saved } : d);
+      const dirty = this.isDirty(d);
       const tab = h(`div.tab${d === this.active ? '.active' : ''}${dirty ? '.dirty' : ''}`, {
         role: 'tab',
         draggable: 'true',
@@ -675,6 +687,7 @@ export class Workspace {
     const s = this.ide.settings;
     if (!s.get('workspace.restore')) {
       this.activate(null);
+      this.restoredNow();
       return;
     }
     this.restoring = true;
@@ -686,6 +699,12 @@ export class Workspace {
     this.restoring = false;
     const want = this.find(s.get('workspace.activeFile')) || this.docs[0] || null;
     this.activate(want);
+    this.restoredNow();
+  }
+
+  restoredNow() {
+    this.restored = true;
+    this.ide.events.emit('workspace-restored');
   }
 }
 

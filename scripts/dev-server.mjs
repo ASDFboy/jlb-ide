@@ -31,6 +31,15 @@ const runs = new Map();
 let nextRun = 1;
 let repl = null;
 const dialogQueue = [];
+// Backups of unsaved work (see src-tauri/src/backups.rs). Tests start a new
+// session with /__test/restart to act like the IDE being opened again.
+let backupSession = `s${Date.now()}-${process.pid}`;
+const backupRoot = () => path.join(config, 'backups');
+const backupDir = () => path.join(backupRoot(), backupSession);
+const plainName = (n) => {
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(n || '')) throw `"${n}" isn't a valid backup name`;
+  return n;
+};
 
 const commands = {
   async read_text({ path: p }) {
@@ -207,6 +216,47 @@ const commands = {
     await fs.cp(from, dest, { recursive: true, filter: (p) => !/[\\/](\.git|node_modules)$/.test(p) });
     return dest;
   },
+  async backup_write({ key, data }) {
+    const d = backupDir();
+    await fs.mkdir(d, { recursive: true });
+    await fs.writeFile(path.join(d, 'alive'), '');
+    await fs.writeFile(path.join(d, plainName(key) + '.tmp'), data);
+    await fs.rename(path.join(d, key + '.tmp'), path.join(d, key + '.json'));
+  },
+  async backup_delete({ key }) {
+    const d = backupDir();
+    await fs.rm(path.join(d, plainName(key) + '.json'), { force: true });
+    const left = fss.existsSync(d) ? (await fs.readdir(d)).filter((f) => f.endsWith('.json')) : [];
+    if (!left.length) await fs.rm(d, { recursive: true, force: true });
+  },
+  async backup_heartbeat() {
+    if (fss.existsSync(backupDir())) await fs.writeFile(path.join(backupDir(), 'alive'), '');
+  },
+  async backup_close({ keep }) {
+    if (!fss.existsSync(backupDir())) return;
+    if (keep) await fs.writeFile(path.join(backupDir(), 'closed'), '');
+    else await fs.rm(backupDir(), { recursive: true, force: true });
+  },
+  async backup_leftovers() {
+    await fs.mkdir(backupRoot(), { recursive: true });
+    const out = [];
+    for (const name of await fs.readdir(backupRoot())) {
+      const d = path.join(backupRoot(), name);
+      if (name === backupSession || !(await fs.stat(d)).isDirectory()) continue;
+      let stale = true;
+      try {
+        stale = Date.now() - (await fs.stat(path.join(d, 'alive'))).mtimeMs > 45000;
+      } catch { /* no alive file */ }
+      if (!stale && !fss.existsSync(path.join(d, 'closed'))) continue;
+      const items = [];
+      for (const f of await fs.readdir(d)) if (f.endsWith('.json')) items.push(await fs.readFile(path.join(d, f), 'utf8'));
+      out.push({ folder: name, items });
+    }
+    return out;
+  },
+  async backup_forget({ folder }) {
+    if (folder !== backupSession) await fs.rm(path.join(backupRoot(), plainName(folder)), { recursive: true, force: true });
+  },
   async find_interpreters() {
     const c = process.env.JLB_C_PATH;
     return { rust: fss.existsSync(jlbPath) ? jlbPath : null, c: c && fss.existsSync(c) ? c : null };
@@ -244,6 +294,11 @@ http.createServer(async (req, res) => {
     for await (const c of req) body += c;
     dialogQueue.push(...JSON.parse(body).paths);
     res.end('{}');
+    return;
+  }
+  if (url.pathname === '/__test/restart' && req.method === 'POST') {
+    backupSession = `s${Date.now()}-${process.pid}`;
+    res.end(JSON.stringify({ session: backupSession }));
     return;
   }
   if (url.pathname.startsWith('/__bridge/')) {

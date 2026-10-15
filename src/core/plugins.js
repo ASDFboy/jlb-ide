@@ -219,6 +219,13 @@ export class Plugins {
         newFile: (text) => ide.workspace.newFile(text),
         save: () => ide.workspace.save(),
         textOf: (doc) => ide.workspace.textOf(doc),
+        /** True when the tab has changes that aren't saved. */
+        isDirty: (doc) => ide.workspace.isDirty(doc),
+        /** Replaces a tab's text, as an edit that shows as unsaved. */
+        setText: (doc, text) => ide.workspace.setText(doc, text),
+        activate: (doc) => ide.workspace.activate(doc),
+        /** True once the files from last time have been reopened (see the workspace-restored event). */
+        get restored() { return !!ide.workspace.restored; },
       },
 
       layout: {
