@@ -4,6 +4,8 @@ import { snippetCompletion } from '@codemirror/autocomplete';
 import { StateField } from '@codemirror/state';
 import { showTooltip } from '@codemirror/view';
 import { scan } from './scan.js';
+import { peek } from './linked.js';
+import { basename } from '../core/paths.js';
 
 const SNIPPETS = [
   ['IF', 'IF ${condition} {\n\t${}\n}', 'IF block'],
@@ -49,7 +51,18 @@ export default {
       const dot = before.match(/([a-z_][a-z0-9_]*)\.\s*$/);
       if (dot || /\.\s*$/.test(before)) {
         if (!dot || !api.settings.get('fields')) return null;
-        for (const name of info.fields.get(dot[1]) || []) options.push({ label: name, type: 'property', boost: 1 });
+        const load = peek(api.workspace.active?.path)?.loads.get(dot[1]);
+        const fromLoad = new Set();
+        if (load?.names && !info.globals.has(dot[1])) {
+          // tool. gives what the LOADed file defines.
+          for (const d of load.names.values()) {
+            fromLoad.add(d.name);
+            options.push(d.kind === 'func'
+              ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: `From ${basename(d.path)}`, boost: 2, apply: callApply(d.name) }
+              : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: `From ${basename(d.path)}`, boost: 2 });
+          }
+        }
+        for (const name of info.fields.get(dot[1]) || []) if (!fromLoad.has(name)) options.push({ label: name, type: 'property', boost: 1 });
         const fn = info.funcs.find((f) => f.name === dot[1]);
         if (fn) for (const name of fn.locals) options.push({ label: name, type: 'variable', detail: `in ${fn.name}()` });
         return options.length ? { from, options, validFor: /^[a-z0-9_]*$/ } : null;
@@ -93,12 +106,27 @@ export default {
           seen.add(name);
           options.push({ label: name, type: 'variable', boost: 1 });
         }
+        // Names from files brought in with IMPORT (and the files that IMPORT this one).
+        const link = peek(api.workspace.active?.path);
+        for (const d of link ? [...link.names.values(), ...link.outer.values()] : []) {
+          if (seen.has(d.name) || d.name === typed) continue;
+          seen.add(d.name);
+          options.push(d.kind === 'func'
+            ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: `From ${basename(d.path)}`, boost: 1 }
+            : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: `From ${basename(d.path)}`, boost: 1 });
+        }
       }
       return { from, options };
     });
 
     // ---------- input hints ----------
-    const signature = (name, state) => {
+    const signature = (name, state, owner) => {
+      if (owner) {
+        const load = peek(api.workspace.active?.path)?.loads.get(owner);
+        const d = load?.names?.get(name);
+        if (d?.kind === 'func') return { name: `${owner}.${name}`, params: d.params, desc: null };
+        if (load) return null;
+      }
       if (BUILTINS[name]) {
         const [sig, desc] = BUILTINS[name];
         return { name, params: splitParams(sig.slice(sig.indexOf('(') + 1, sig.lastIndexOf(')'))), desc };
@@ -106,13 +134,19 @@ export default {
       const text = state.doc.toString();
       if (cache.text !== text) cache = { text, info: scan(text) };
       const f = cache.info.funcs.find((x) => x.name === name);
-      return f ? { name, params: f.params, desc: null } : null;
+      if (f) return { name, params: f.params, desc: null };
+      const link = peek(api.workspace.active?.path);
+      const d = link?.names.get(name) || link?.outer.get(name);
+      return d?.kind === 'func' && !cache.info.globals.has(name) ? { name, params: d.params, desc: null } : null;
     };
     const hintField = StateField.define({
       create: () => null,
       update(value, tr) {
         if (!tr.docChanged && !tr.selection) return value;
         if (!api.settings.get('inputHints')) return null;
+        // Shown while typing a call, and kept up while moving around inside it; just
+        // clicking or jumping into one doesn't cover the lines above with it.
+        if (!tr.docChanged && (!value || tr.isUserEvent('select.pointer'))) return null;
         return hintAt(tr.state, signature);
       },
       provide: (f) => showTooltip.from(f),
@@ -120,6 +154,14 @@ export default {
     api.editor.addExtension(hintField);
   },
 };
+
+/** Puts in name() with the cursor between the brackets (or just the name before an existing "("). */
+function callApply(name) {
+  return (view, completion, f, t) => {
+    const next = view.state.sliceDoc(t, t + 1);
+    view.dispatch({ changes: { from: f, to: t, insert: next === '(' ? name : name + '()' }, selection: { anchor: f + name.length + 1 } });
+  };
+}
 
 /** "t, value, [pos]" → ["t", "value", "[pos]"], keeping [ ] groups together. */
 function splitParams(inner) {
@@ -177,13 +219,15 @@ function hintAt(state, signature) {
       depth--;
     } else if (c === '(') {
       if (depth > 0) { depth--; continue; }
-      const name = text.slice(0, i).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/)?.[1];
+      const called = text.slice(0, i).match(/(?:(?<![\w.])([a-z_][a-z0-9_]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+      const name = called?.[2];
+      const owner = called?.[1];
       if (!name || /^(IF|ELIF|ELSEIF|WHILE|FOR|REPEAT|RETURN|FUNC)$/.test(name)) return null;
       if (/\bFUNC\s+$/.test(text.slice(0, i - name.length))) return null; // defining, not calling
-      const sig = signature(name, state);
+      const sig = signature(name, state, owner);
       if (!sig || !sig.params.length) return null;
       return {
-        pos: start + i - name.length,
+        pos: start + called.index,
         above: true,
         strictSide: false,
         create: () => {

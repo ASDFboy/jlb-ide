@@ -130,6 +130,7 @@ export class Language {
   async hover(view, pos, side) {
     if (this.ide.settings.get('editor.hoverCtrl') && !this.ctrlHeld) return null;
     const ctx = this.context(view.state, pos);
+    const doc = view.state.doc;
     for (const p of this.hovers) {
       let r;
       try {
@@ -137,6 +138,8 @@ export class Language {
       } catch (e) {
         console.error('[jlb-ide] a hover provider failed:', e);
       }
+      // Another file (or an edit) may have come in while waiting; the place is gone.
+      if (view.state.doc !== doc) return null;
       if (!r) continue;
       const range = r.range || ctx.op || ctx.word || { from: pos, to: pos };
       return {

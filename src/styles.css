@@ -1285,6 +1285,16 @@ textarea.input {
   color: var(--syn-label);
 }
 
+.outline-item.import .outline-kind,
+.outline-item.load .outline-kind {
+  color: var(--syn-string);
+}
+
+.outline-item.missing .outline-label {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+
 .outline-label {
   flex: 1;
   font-family: 'JetBrains Mono', monospace;

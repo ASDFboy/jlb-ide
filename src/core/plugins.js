@@ -243,6 +243,8 @@ export class Plugins {
         addCompletions: (fn) => track(ide.language.addCompletions(fn)),
         addCheck: (rule) => track(ide.language.addCheck({ id: p.id, title: p.name, ...rule })),
         context: (state, pos) => ide.language.context(state, pos),
+        /** Runs the checks again on an open file (the one on screen if none is given). */
+        recheck: (doc) => (!doc || doc === ide.workspace.active ? ide.language.recheck() : ide.language.queueCheck(doc)),
       },
 
       run: {
