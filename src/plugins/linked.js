@@ -24,9 +24,11 @@ export function resolvePath(fromFile, rel) {
   const s = fromFile.includes('\\') ? '\\' : '/';
   const absolute = /^([a-z]:)?[\\/]/i.test(rel);
   const full = absolute ? rel : dirname(fromFile) + s + rel;
-  const drive = full.match(/^[a-z]:/i)?.[0] || '';
+  // "\x.jlb" on Windows means the root of the importing file's drive.
+  const drive = full.match(/^[a-z]:/i)?.[0] || fromFile.match(/^[a-z]:/i)?.[0] || '';
+  if (!/^[a-z]:/i.test(full) && drive && absolute) return resolvePath(drive + s + 'x', full.replace(/^[\\/]+/, ''));
   const parts = [];
-  for (const part of full.slice(drive.length).split(/[\\/]+/)) {
+  for (const part of full.slice(/^[a-z]:/i.test(full) ? 2 : 0).split(/[\\/]+/)) {
     if (!part || part === '.') continue;
     if (part === '..') parts.pop();
     else parts.push(part);

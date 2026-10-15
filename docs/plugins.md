@@ -137,6 +137,7 @@ A plain key like `"showInStatusBar"` is your plugin's own: it's stored as `word-
 | `textOf(file)` | Any open file's current text. |
 | `isDirty(file)` | `true` when the file has unsaved changes. |
 | `setText(file, text)` | Replaces a file's text as an edit (it can be undone, and shows as unsaved). |
+| `edit(file, changes)` | Changes part of a file's text: `{ from, to, insert }` or a list of them, by offsets in its current text. One edit that can be undone. |
 | `activate(file)` | Switches to an open file's tab. |
 | `restored` | `true` once the files from last time have been reopened. |
 
@@ -197,6 +198,7 @@ A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` c
 | `file-open`, `file-save`, `file-close` | the file |
 | `active-change` | the new current file (or `null`) |
 | `editor-change` | a CodeMirror update, after the text changes |
+| `doc-change` | the file, after a tab that isn't on screen is changed (by `edit` or `setText`) |
 | `editor-cursor` | the editor state, after the cursor moves |
 | `folder-change` | the new folder path |
 | `workspace-restored` | nothing; the files from last time have been reopened |
@@ -215,6 +217,7 @@ Some built-in features share an API through `api.use(name)`, which gives back `u
 | Name | What it offers |
 | --- | --- |
 | `tableview` | `open({ title, node, load })` shows a table in the table viewer. `node` is a value as the debugger sends it (`{ name, type, value, items, more }`); `parse(text)` makes one from a value written the way .jlb writes it, like `[name: "Ann", hp: 10]`. `load` (optional) is an async function giving back the whole table, for "Load all". |
+| `search` | `find(text, { caseSensitive, wholeWord, regex })` opens the Search view and searches every file for `text`. |
 | `debugger` | `wanted(doc)`: whether Run will debug (breakpoints are set). |
 | `backups` | `flush()` backs every unsaved tab up now. |
 

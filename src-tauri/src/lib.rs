@@ -26,6 +26,8 @@ pub fn run() {
             files::create_dir,
             files::rename_path,
             files::delete_path,
+            files::list_files,
+            files::read_texts,
             runner::run_program,
             runner::send_input,
             runner::stop_program,

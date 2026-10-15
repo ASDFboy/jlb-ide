@@ -32,8 +32,10 @@ import debuggerPlugin from './plugins/debugger.js';
 import compare from './plugins/compare.js';
 import testsPlugin from './plugins/tests.js';
 import tableview from './plugins/tableview.js';
+import search from './plugins/search.js';
+import rename from './plugins/rename.js';
 
-const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups, tableview, debuggerPlugin, compare, testsPlugin];
+const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, search, rename, docs, backups, tableview, debuggerPlugin, compare, testsPlugin];
 
 async function start() {
   const ide = { events: new Emitter() };

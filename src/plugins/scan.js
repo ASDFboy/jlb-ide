@@ -50,6 +50,21 @@ export function loadName(file) {
   return String(file).split(/[\\/]/).pop().replace(/(.)\.[^.]*$/, '$1').toLowerCase().replace(/[- ]/g, '_');
 }
 
+/**
+ * Where a name in `refs` lives: "block:<id>" for a FOR or FAIL name, "func:<index>" for
+ * a function's own local, or "global" for an outside name. Inside a function, giving a
+ * value to a name that exists outside changes the outside one, so `outside` lists the
+ * names that come from other files.
+ */
+export function bindingOf(info, r, outside) {
+  if (r.block != null) return 'block:' + r.block;
+  if (r.func < 0) return 'global';
+  const f = info.funcs[r.func];
+  if (f.declared.has(r.name)) return 'func:' + r.func;
+  if (info.globals.has(r.name) || outside?.has(r.name)) return 'global';
+  return 'func:' + r.func;
+}
+
 export function scan(text) {
   const { noComments, code } = strip(text);
   const starts = [0];
@@ -87,9 +102,15 @@ export function scan(text) {
     defined.add(name);
     if (!definedAt.has(name)) definedAt.set(name, where(off));
   };
-  const scopes = []; // { depth, names: Set, func: index | -1, kind }
+  const scopes = []; // { depth, names: Set, func: index | -1, kind, id }
   let depth = 0;
-  let pending = null; // what the next "{" opens: { kind, names, func }
+  let pending = null; // what the next "{" opens: { kind, names, func, id }
+  let scopeIds = 0;
+  // Every place a name appears, for renaming: refs are names (with where they live,
+  // see bindingOf), labels are POINT and GOTO names, entries are t.name.
+  const refs = [];
+  const labels = [];
+  const entries = [];
   const currentFunc = () => {
     for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].kind === 'func') return scopes[i].func;
     return -1;
@@ -100,6 +121,15 @@ export function scan(text) {
     if (f >= 0) funcs[f].locals.add(name);
     else if (!globals.has(name)) globals.set(name, off);
   };
+  // The FOR or FAIL block a name belongs to, if any (stopping at the function it's in).
+  const blockOf = (name) => {
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      if (scopes[i].kind === 'func') return null;
+      if (scopes[i].names.has(name)) return scopes[i].id;
+    }
+    return null;
+  };
+  const ref = (name, off, extra) => refs.push({ name, off, func: currentFunc(), block: blockOf(name), ...extra });
   const visibleBlockNames = () => {
     const names = new Set();
     for (let i = scopes.length - 1; i >= 0; i--) {
@@ -115,7 +145,7 @@ export function scan(text) {
     const prev = toks[k - 1]?.t;
     if (t === '{') {
       depth++;
-      scopes.push({ depth, names: new Set(pending?.names || []), func: pending?.func ?? -1, kind: pending?.kind || 'block' });
+      scopes.push({ depth, names: new Set(pending?.names || []), func: pending?.func ?? -1, kind: pending?.kind || 'block', id: pending?.id ?? ++scopeIds });
       pending = null;
       continue;
     }
@@ -128,13 +158,14 @@ export function scan(text) {
       let j = k + 1;
       let name = null;
       const index = funcs.length;
-      const fn = { name, params: [], locals: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc() };
+      const fn = { name, params: [], locals: new Set(), declared: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc() };
       funcs.push(fn);
       if (isName(toks[j]?.t)) {
         fn.name = name = toks[j].t;
         fn.nameCol = where(toks[j].off).col;
         // A named function is a value like any other: global when made outside functions.
         giveValue(name, toks[j].off);
+        ref(name, toks[j].off);
         j++;
       }
       const names = [];
@@ -151,12 +182,14 @@ export function scan(text) {
           else if (start && isName(x)) {
             define(x, toks[j].off);
             names.push(x);
+            fn.declared.add(x);
+            refs.push({ name: x, off: toks[j].off, func: index, block: null });
             fn.params.push(toks[j - 1]?.t === '@' ? '@' + x : toks[j - 1]?.t === '...' ? '...' + x : x);
             start = false;
           }
         }
       }
-      pending = { kind: 'func', names, func: index };
+      pending = { kind: 'func', names, func: index, id: ++scopeIds };
       k = j;
       continue;
     }
@@ -164,40 +197,50 @@ export function scan(text) {
       const p = where(toks[k + 1].off);
       if (t === 'POINT' && !points.has(next)) points.set(next, p);
       if (t === 'GOTO') gotos.push({ name: next, ...p });
+      labels.push({ name: next, off: toks[k + 1].off });
       k++;
       continue;
     }
     if (t === 'FOR') {
       const names = [];
+      const id = ++scopeIds;
       let j = k + 1;
       for (; j < toks.length && toks[j].t !== 'IN' && toks[j].t !== '{'; j++) {
         if (isName(toks[j].t)) {
           define(toks[j].t, toks[j].off);
           names.push(toks[j].t);
+          refs.push({ name: toks[j].t, off: toks[j].off, func: currentFunc(), block: id });
         }
       }
-      pending = { kind: 'block', names, func: -1 };
+      pending = { kind: 'block', names, func: -1, id };
       k = j - 1;
       continue;
     }
     if (t === 'FAIL' && isName(next)) {
       define(next, toks[k + 1].off);
-      pending = { kind: 'block', names: [next], func: -1 };
+      pending = { kind: 'block', names: [next], func: -1, id: ++scopeIds };
+      refs.push({ name: next, off: toks[k + 1].off, func: currentFunc(), block: pending.id });
       k++;
       continue;
     }
     if (t === 'LOCAL' && isName(next)) {
       giveValue(next, toks[k + 1].off);
+      if (currentFunc() >= 0) funcs[currentFunc()].declared.add(next);
+      ref(next, toks[k + 1].off);
       k++;
       continue;
     }
     if (!isName(t)) continue;
     if (prev === '.') {
       // a table entry: t.name
-      if (isName(toks[k - 2]?.t) && toks[k - 3]?.t !== '.') addField(toks[k - 2].t, t);
+      if (isName(toks[k - 2]?.t) && toks[k - 3]?.t !== '.') {
+        addField(toks[k - 2].t, t);
+        entries.push({ owner: toks[k - 2].t, name: t, off });
+      }
       continue;
     }
     if (next === ':') continue; // a name in a table: [name: 1]
+    ref(t, off);
     if (ASSIGN.has(next)) {
       giveValue(t, off);
       // t = [name: 1, other: 2] names its entries.
@@ -240,6 +283,9 @@ export function scan(text) {
     fields,
     loads,
     imports,
+    refs,
+    labels,
+    entries,
     lineAt: (off) => where(off).line,
     at: where,
     points,

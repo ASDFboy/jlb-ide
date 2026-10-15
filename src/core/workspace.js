@@ -101,12 +101,22 @@ export class Workspace {
 
   /** Replaces a tab's text (as an edit, so it can be undone and shows as unsaved). */
   setText(doc, text) {
+    const state = doc === this.active ? this.ide.editor.view.state : doc.state;
+    this.edit(doc, { from: 0, to: state.doc.length, insert: text });
+  }
+
+  /**
+   * Changes part of a tab's text, as one edit that can be undone and shows as unsaved.
+   * changes: { from, to, insert } or a list of them, by offsets in the current text.
+   */
+  edit(doc, changes, { userEvent = 'input.replace' } = {}) {
     if (doc === this.active) {
-      const v = this.ide.editor.view;
-      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: text } });
+      this.ide.editor.view.dispatch({ changes, userEvent });
     } else {
-      doc.state = doc.state.update({ changes: { from: 0, to: doc.state.doc.length, insert: text } }).state;
+      doc.state = doc.state.update({ changes, userEvent }).state;
       this.renderTabs();
+      // The editor only reports changes to the tab on screen.
+      this.ide.events.emit('doc-change', doc);
     }
   }
 

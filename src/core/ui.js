@@ -73,6 +73,7 @@ const ICONS = {
   code: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
   dot: '<circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/>',
   save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+  replace: '<path d="M4 8h14l-4-4"/><path d="M20 16H6l4 4"/>',
 };
 
 /** An inline SVG icon by name (plugins can pass their own SVG path markup instead). */
@@ -119,6 +120,12 @@ function modal(build) {
         e.stopPropagation();
         close(null);
       }
+      // Enter on a button presses it here, so the key doesn't also reach the editor
+      // that gets the focus back when the dialog closes.
+      if (e.key === 'Enter' && e.target.tagName === 'BUTTON') {
+        e.preventDefault();
+        e.target.click();
+      }
     });
     build(box, close);
     document.body.append(back);
@@ -143,7 +150,12 @@ export function confirm(message, { ok = 'OK', cancel = 'Cancel', danger = false,
 export function prompt(message, { value = '', ok = 'OK', placeholder = '', select } = {}) {
   return modal((box, close) => {
     const input = h('input.input', { value, placeholder, autofocus: true, spellcheck: false });
-    input.addEventListener('keydown', (e) => e.key === 'Enter' && close(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      // Otherwise the Enter would also type a new line in the editor that gets the focus back.
+      e.preventDefault();
+      close(input.value);
+    });
     box.append(
       h('label.dialog-msg', message, input),
       h('div.dialog-buttons',

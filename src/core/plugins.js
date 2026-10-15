@@ -180,7 +180,7 @@ export class Plugins {
       jlb: langData,
 
       events: {
-        /** Events: file-open, file-save, file-close, active-change, editor-change, editor-cursor,
+        /** Events: file-open, file-save, file-close, active-change, editor-change, doc-change, editor-cursor,
          *  folder-change, problems, run-start, run-output, run-exit, crash, settings-change. */
         on: (name, fn) => track(ide.events.on(name, fn)),
         emit: (name, ...args) => ide.events.emit(`${p.id}:${name}`, ...args),
@@ -223,6 +223,8 @@ export class Plugins {
         isDirty: (doc) => ide.workspace.isDirty(doc),
         /** Replaces a tab's text, as an edit that shows as unsaved. */
         setText: (doc, text) => ide.workspace.setText(doc, text),
+        /** Changes part of a tab's text: { from, to, insert } or a list of them. Undoable, shows as unsaved. */
+        edit: (doc, changes) => ide.workspace.edit(doc, changes),
         activate: (doc) => ide.workspace.activate(doc),
         /** True once the files from last time have been reopened (see the workspace-restored event). */
         get restored() { return !!ide.workspace.restored; },
