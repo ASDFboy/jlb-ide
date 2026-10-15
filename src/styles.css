@@ -2390,3 +2390,321 @@ button.status-item:hover {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ---------- debugger ---------- */
+
+.cm-bp-gutter .cm-gutterElement {
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.bp-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rose);
+  flex: none;
+}
+
+/* A faint dot shows where a click would put a breakpoint. */
+.cm-bp-gutter .cm-gutterElement:empty:hover::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rose);
+  opacity: 0.3;
+}
+
+.bp-here {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amber);
+}
+
+.bp-here.caller {
+  color: var(--muted);
+}
+
+.cm-debug-line {
+  background: var(--tint-yellow) !important;
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+
+.cm-debug-line.caller {
+  background: var(--hover) !important;
+  box-shadow: inset 2px 0 0 var(--muted);
+}
+
+.dbg-strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin-right: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.dbg-strip[hidden] {
+  display: none;
+}
+
+.dbg-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dbg-btn:not(:disabled) .icon {
+  color: var(--sky);
+}
+
+.dbg-btn[title^="Continue"] .icon,
+.dbg-btn[title^="Start"] .icon {
+  color: var(--run);
+}
+
+.dbg-controls {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 4px;
+}
+
+.dbg-status {
+  margin: 4px 10px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+
+.dbg-status p {
+  margin: 0;
+}
+
+.dbg-status p + p {
+  margin-top: 3px;
+  font-size: 0.92em;
+}
+
+.dbg-status.paused {
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+
+.dbg-status.running {
+  box-shadow: inset 3px 0 0 var(--run);
+}
+
+.dbg-status.error {
+  box-shadow: inset 3px 0 0 var(--rose);
+}
+
+.dbg-status.error p:first-child {
+  color: var(--rose);
+}
+
+.dbg-section {
+  border-top: 1px solid var(--line);
+  padding: 4px 0 8px;
+}
+
+.dbg-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 6px 12px 4px;
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dbg-heading .link {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.dbg-sub {
+  margin: 6px 12px 2px;
+  font-size: 0.85em;
+  color: var(--faint);
+}
+
+.dbg-stack,
+.dbg-bps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dbg-frame,
+.dbg-bp {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 3px 12px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dbg-frame span:first-child,
+.dbg-bp span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbg-frame:hover,
+.dbg-bp:hover {
+  background: var(--hover);
+}
+
+.dbg-stack li.on .dbg-frame {
+  background: var(--raised);
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+
+.dbg-bps li,
+.dbg-watch {
+  display: flex;
+  align-items: center;
+}
+
+.dbg-bps li .dbg-bp {
+  flex: 1;
+  min-width: 0;
+}
+
+.dbg-watch .dbg-vars {
+  flex: 1;
+  min-width: 0;
+}
+
+.dbg-x {
+  flex: none;
+  margin-right: 6px;
+  opacity: 0;
+}
+
+.dbg-bps li:hover .dbg-x,
+.dbg-watch:hover .dbg-x,
+.dbg-x:focus-visible {
+  opacity: 1;
+}
+
+.dbg-vars {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+}
+
+.dbg-var {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding-right: 10px;
+  white-space: nowrap;
+}
+
+.dbg-var.table {
+  cursor: pointer;
+}
+
+.dbg-var.table:hover {
+  background: var(--hover);
+}
+
+.dbg-var:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: -2px;
+}
+
+.dbg-var .icon {
+  flex: none;
+  color: var(--faint);
+}
+
+.dbg-twisty {
+  width: 12px;
+  flex: none;
+}
+
+.dbg-name {
+  color: var(--sky);
+  flex: none;
+}
+
+.dbg-name::after {
+  content: ':';
+  color: var(--faint);
+}
+
+.dbg-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dbg-var.changed .dbg-value {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.dbg-type {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.dbg-more {
+  color: var(--faint);
+  font-style: italic;
+  min-height: 20px;
+}
+
+.dbg-err {
+  color: var(--rose);
+}
+
+.debug-view {
+  overflow-x: hidden;
+}
+
+.dbg-name {
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dbg-watch-input {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 6px 12px 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

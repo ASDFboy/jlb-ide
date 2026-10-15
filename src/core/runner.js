@@ -117,11 +117,30 @@ export class Runner {
 
   // ---------- running ----------
 
-  async run() {
+  /**
+   * Runs the current file. With { debug: true } it runs under the debugger, which
+   * needs the Rust interpreter; { debug: 'auto' } (what Run does) debugs only when
+   * the debugger plugin says so, like when breakpoints are set.
+   */
+  async run({ debug = 'auto', stepFirst = false } = {}) {
     const ws = this.ide.workspace;
     const doc = ws.current();
     if (!doc) return toast('Open or create a .jlb file to run it.');
-    const it = this.current();
+    let it = this.current();
+    const dbg = this.ide.plugins.services.get('debugger');
+    let note = null;
+    if (debug === 'auto') debug = !!dbg?.wanted(doc);
+    if (debug && it?.id !== 'rust') {
+      const rust = this.resolve('rust');
+      if (stepFirst || !dbg) {
+        note = `Debugging uses the Rust interpreter, so this runs with Rust instead of ${it?.name}.`;
+        it = rust;
+      } else {
+        // Breakpoints are only a reason to debug when the chosen interpreter can.
+        note = `Breakpoints only work with the Rust interpreter, so ${it?.name} runs without stopping at them.`;
+        debug = false;
+      }
+    }
     if (!it?.path) {
       this.ide.layout.showPanel('output');
       this.system(`The ${it?.name || ''} interpreter isn't set up yet. Choose its program in Settings → Interpreters.`, 'error');
@@ -137,20 +156,21 @@ export class Runner {
     }
     if (s.get('run.clearOutput')) this.clearOutput();
     if (s.get('run.showOutput')) this.ide.layout.showPanel('output', { focus: false });
-    this.system(`Running ${doc.name} with ${it.name}`);
+    this.system(`${debug ? 'Debugging' : 'Running'} ${doc.name} with ${it.name}`);
+    if (note) this.system(note);
     let id;
     try {
-      id = await invoke('run_program', { interpreter: it.path, file: doc.path, cwd: ws.workDir(doc), args: ['--ide'] });
+      id = await invoke('run_program', { interpreter: it.path, file: doc.path, cwd: ws.workDir(doc), args: [debug ? '--debug' : '--ide'] });
     } catch (e) {
       this.system(String(e), 'error');
       this.offerSetup(it);
       return;
     }
-    this.run_ = { id, doc, it, start: performance.now(), stderrLine: '', crash: null };
+    this.run_ = { id, doc, it, debug: !!debug, stepFirst, start: performance.now(), stderrLine: '', crash: null };
     this.lastDoc = doc;
     this.renderRunButton();
     this.setInputEnabled(true);
-    this.ide.events.emit('run-start', { doc, interpreter: it });
+    this.ide.events.emit('run-start', { doc, interpreter: it, debug: !!debug, stepFirst });
     const early = this.early.filter((e) => e.payload.id === id);
     this.early = [];
     for (const e of early) (e.kind === 'out' ? this.onOutput(e.payload) : this.onExit(e.payload));
@@ -190,15 +210,32 @@ export class Runner {
   stderr(line) {
     const r = this.run_;
     if (line.startsWith(MARK)) {
+      let msg;
       try {
-        r.crash = JSON.parse(line.slice(1));
+        msg = JSON.parse(line.slice(1));
       } catch {
         // Not JSON after all; show it.
         this.write(line, 'err');
+        return;
       }
+      // The debugger's messages have an "event"; anything else is the crash report.
+      if (msg.event) this.ide.events.emit('debug-event', { ...msg, doc: r.doc });
+      else r.crash = msg;
       return;
     }
     this.writeLinked(line, 'err');
+  }
+
+  /** Sends a command to the program being debugged (see jlb --debug). */
+  async debugCommand(command) {
+    const r = this.run_;
+    if (!r?.debug) return false;
+    try {
+      await invoke('send_input', { id: r.id, text: MARK + command });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Writes an error line with its "line N" parts as links to the code. */
@@ -259,7 +296,7 @@ export class Runner {
     else this.system(`Ended with an error${time}`, 'error');
     this.lastCrash = r.crash;
     if (r.crash) this.ide.events.emit('crash', { report: r.crash, doc: r.doc, interpreter: r.it });
-    this.ide.events.emit('run-exit', { code, stopped: !!r.stopped, doc: r.doc });
+    this.ide.events.emit('run-exit', { code, stopped: !!r.stopped, doc: r.doc, debug: r.debug });
   }
 
   offerSetup(it) {
@@ -365,7 +402,8 @@ export class Runner {
 
   async inputKey(e) {
     if (e.key !== 'Enter' || !this.run_) return;
-    const text = this.inputEl.value;
+    // A line starting with the marker would be taken as a debugger command.
+    const text = this.inputEl.value.replace(new RegExp('^' + MARK + '+'), '');
     this.inputEl.value = '';
     // Show what was typed, after the prompt, like a terminal does.
     this.write(text + '\n', 'in');

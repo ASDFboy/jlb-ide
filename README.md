@@ -19,6 +19,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
   - A name used where it doesn't exist: one that's only given a value inside another function, or a `FOR` or `FAIL` name used after its block.
   - A variable or function used above the line that gives it a value (top-level code runs in order).
   - A `GOTO` with no matching `POINT`.
+- **Step-by-step debugger.** Click left of a line number to set a breakpoint, then Run: the program stops there. Step through it line by line (into and out of functions), and see every variable in the Debug view, with tables opening up to show what's inside and the values that just changed standing out. Rest the mouse on a name to see its value, and watch expressions like `hero.hp * 2`. Pause stops a loop that never ends, and an error stops the program before it ends, so you can see why.
 - **Crash report viewer.** When a program crashes, a panel shows the error, the function calls and every variable's value in a table. The crashing line is marked in your code, and resting the mouse on a variable shows what it held when the program crashed.
 - **Quirk explainer.** Rest the mouse on any operator, command or keyword for a plain-English explanation: how `&` differs from `&&`, what `!%` and `!^` do, why `!=` is an error, what `0xFF` equals. Your own functions show their inputs, and which ones are shared with `@`.
 - **Quick-try console.** Type a bit of .jlb and see the result and its type right away: `"25" * 2` gives `"2525"` (TEXT). Variables carry over between snippets, `INPUT` asks right in the panel, and a snippet stuck in a loop can be stopped. Select code in the editor and press Ctrl+Enter to try it, or load the whole file to try out its functions.
@@ -47,7 +48,7 @@ Anyone can add features with a plugin: a folder with a `plugin.json` and a `main
 
 - **The Windows downloads aren't code-signed** (a signing certificate costs money every year), so Windows SmartScreen may warn the first time. Choose **More info → Run anyway**.
 - **The C interpreter isn't finished yet.** Once [jlb-c](https://github.com/ASDFboy/jlb-c) exists, point the IDE at it in Settings → Interpreters, and the C button in the toolbar starts working.
-- **There's no step-by-step debugger yet.** The crash viewer and Quick-try cover a lot of the same ground.
+- **The debugger needs the Rust interpreter.** With C chosen, Run ignores breakpoints, and Start debugging switches to Rust for that run.
 - **Plugins are trusted code.** They can read and change your files and run programs, like extensions in other editors, so only install plugins you trust.
 - **Ready-made downloads are Windows only for now.** On macOS and Linux, [build it from source](#building-from-source).
 
@@ -74,10 +75,15 @@ In **Settings → Files**, **Edit .jlb files with JLB IDE** adds **Edit with JLB
 1. **Open a folder** (Ctrl+Shift+O) or a file (Ctrl+O), or start a **New file** (Ctrl+N). The welcome screen has examples to try.
 2. **Run** with F5. Output appears below. If the program asks for `INPUT`, type in the box at the bottom of the Output panel and press Enter.
 3. **Stop** a running program with Shift+F5 or the square button.
+4. **Debug:** click left of a line number (or press F9) to set a breakpoint, then run. Or press F6 to stop at the first line.
 
 | Shortcut | Does |
 | --- | --- |
 | F5 / Shift+F5 | run / stop |
+| F9 | set or remove a breakpoint |
+| F6 | start debugging, stopping at the first line |
+| F8 | continue (or pause, while running) |
+| F10, F11, Shift+F11 | step over, step into, step out |
 | Ctrl+Shift+P | show every command |
 | Ctrl+, | settings |
 | Ctrl+S, Ctrl+Shift+S | save, save as |

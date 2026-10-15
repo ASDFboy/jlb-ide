@@ -234,7 +234,7 @@ export class Plugins {
         showView: (id) => ide.layout.showView(id),
         showPanel: (id, opts) => ide.layout.showPanel(id, opts),
         setBadge: (id, v, kind) => ide.layout.setBadge(id, v, kind),
-        addToolbar: (el, side) => track(ide.layout.addToolbar(el, side)),
+        addToolbar: (el, side, opts) => track(ide.layout.addToolbar(el, side, opts)),
         addStatus: (el, side) => track(ide.layout.addStatus(el, side)),
       },
 
@@ -251,8 +251,16 @@ export class Plugins {
         get current() { return ide.runner.current(); },
         /** { id, name, path } for one interpreter ("rust", "c", ...); path is null if it isn't set up. */
         resolve: (id) => ide.runner.resolve(id),
-        start: () => ide.runner.run(),
+        /** Runs the current file. { debug: true } runs it under the debugger (Rust interpreter). */
+        start: (opts) => ide.runner.run(opts),
         stop: () => ide.runner.stop(),
+        /** The running program, or null: { doc, interpreter, debug }. */
+        get running() {
+          const r = ide.runner.run_;
+          return r ? { doc: r.doc, interpreter: r.it, debug: r.debug } : null;
+        },
+        /** Sends a debugger command (see jlb --debug) to the program being debugged. */
+        debug: (command) => ide.runner.debugCommand(command),
       },
 
       /** Share an API with other plugins, or use one another plugin shared. */
