@@ -76,6 +76,9 @@ async function start() {
   window.addEventListener('keydown', (e) => ide.commands.handleKey(e), true);
   guardClose(ide);
   document.body.classList.add('ready');
+  // Debug builds started with JLB_IDE_SELFTEST check themselves (see selftest.js).
+  const selftest = inTauri && (await invoke('selftest_target').catch(() => null));
+  if (selftest) (await import('./selftest.js')).run(ide, selftest);
 }
 
 function registerCommands(ide) {

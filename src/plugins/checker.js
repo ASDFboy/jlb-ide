@@ -2,7 +2,7 @@
 // the .jlb quirks that trip people up.
 
 import { scan, loadName } from './scan.js';
-import { linked, dependents } from './linked.js';
+import { linked, dependents, forgetLooked } from './linked.js';
 import { basename } from '../core/paths.js';
 
 export default {
@@ -86,7 +86,10 @@ export default {
       timer = setTimeout(() => dependents(api, doc.path).forEach((d) => api.language.recheck(d)), 500);
     };
     api.events.on('editor-change', () => changed(api.workspace.active));
-    api.events.on('file-save', changed);
+    api.events.on('file-save', (doc) => {
+      forgetLooked();
+      changed(doc);
+    });
     api.onDispose(() => clearTimeout(timer));
   },
 };

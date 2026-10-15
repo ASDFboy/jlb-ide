@@ -49,9 +49,9 @@
   --syn-property: #f8f8f2;
   --syn-punct: #cfcfc2;
   --syn-invalid: #f92672;
-  --bracket-1: #ffd866;
-  --bracket-2: #d58ff5;
-  --bracket-3: #6fb8ff;
+  --bracket-1: #d58ff5;
+  --bracket-2: #6fb8ff;
+  --bracket-3: #ffd866;
 }
 
 :root[data-theme='day'] {
@@ -99,9 +99,9 @@
   --syn-property: #272822;
   --syn-punct: #6e6b5c;
   --syn-invalid: #c8125a;
-  --bracket-1: #9a6f00;
-  --bracket-2: #9b30c2;
-  --bracket-3: #1a66c9;
+  --bracket-1: #9b30c2;
+  --bracket-2: #1a66c9;
+  --bracket-3: #a0522d;
 }
 
 * {

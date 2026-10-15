@@ -56,10 +56,10 @@ export default {
         return;
       }
       const files = plan.files.filter((f) => f.places.length);
-      // Names already in use where the renamed one would go mix the two up.
-      const clash = files.filter((f) => f.taken(name));
+      // A name already in use where the renamed one would go would mix the two up.
+      const clash = plan.clashes(name);
       if (clash.length) {
-        const ok = await confirm(`${name} is already used in ${list(clash.map((f) => f.file.name))}.`, {
+        const ok = await confirm(`${name} is already used in ${list(clash)}, so renaming would mix the two up.`, {
           detail: 'Renaming would make the two names one, which changes what the program does.',
           ok: 'Rename anyway',
           danger: true,
@@ -90,20 +90,24 @@ export default {
 };
 
 /**
- * What renaming the name at `pos` changes: { name, files: [{ file, text, places: [{ off }], taken(name) }] },
- * or { error } saying why it can't be renamed.
+ * What renaming the name at `pos` changes: { name, files: [{ file, text, places: [{ off }] }], clashes(newName) },
+ * where clashes gives the files in which the new name would get mixed up with one
+ * already there; or { error } saying why it can't be renamed.
  */
 export async function planAt(api, doc, text, pos) {
   const info = scan(text);
   const at = (list, len) => list.find((r) => pos >= r.off && pos <= r.off + len(r));
   const here = { path: doc.path, name: doc.name, rel: doc.name, doc };
-  const single = (places) => ({ files: [{ file: here, text, places, taken: (n) => takenIn(info, n) }] });
-
-  const label = at(info.labels, (r) => r.name.length);
-  if (label) return { name: label.name, ...single(info.labels.filter((l) => l.name === label.name)) };
-
   const link = doc.path ? await linked(api, doc.path, text, info) : null;
   const outside = new Set([...(link?.names.keys() || []), ...(link?.outer.keys() || [])]);
+  const single = (places, binding) => ({
+    files: [{ file: here, text, places }],
+    clashes: (n) => (clashIn(info, n, places, binding, outside) ? [here.name] : []),
+  });
+
+  const label = at(info.labels, (r) => r.name.length);
+  if (label) return { name: label.name, ...single(info.labels.filter((l) => l.name === label.name), 'label') };
+
   const r = at(info.refs, (x) => x.name.length);
   if (r) {
     if ((info.loads.has(r.name) || link?.names.get(r.name)?.kind === 'load') && bindingOf(info, r, outside) === 'global') {
@@ -115,12 +119,12 @@ export async function planAt(api, doc, text, pos) {
       // A function's local can also be reached from outside it as fn.name.
       const fn = binding.startsWith('func:') ? info.funcs[Number(binding.slice(5))] : null;
       if (fn?.name && fn.inFunc < 0) places.push(...info.entries.filter((e) => e.owner === fn.name && e.name === r.name));
-      return { name: r.name, ...single(places) };
+      return { name: r.name, ...single(places, binding) };
     }
     if (!doc.path || !api.settings.get('otherFiles')) {
-      return { name: r.name, ...single(info.refs.filter((x) => x.name === r.name && bindingOf(info, x, new Set([r.name])) === 'global')) };
+      return { name: r.name, ...single(info.refs.filter((x) => x.name === r.name && bindingOf(info, x, new Set([r.name])) === 'global'), 'global') };
     }
-    return { name: r.name, files: await everywhere(api, doc.path, r.name) };
+    return { name: r.name, ...(await everywhere(api, doc.path, r.name)) };
   }
 
   const entry = at(info.entries, (e) => e.name.length);
@@ -128,13 +132,13 @@ export async function planAt(api, doc, text, pos) {
     const def = link?.loads.get(entry.owner)?.names?.get(entry.name);
     if (def && !info.globals.has(entry.owner)) {
       if (!api.settings.get('otherFiles')) return { error: `${entry.name} is defined in another file. Turn on "Also rename in other files" in Settings to rename it.` };
-      return { name: entry.name, files: await everywhere(api, def.path, entry.name) };
+      return { name: entry.name, ...(await everywhere(api, def.path, entry.name)) };
     }
     const idx = info.funcs.findIndex((f) => f.name === entry.owner && f.inFunc < 0);
     if (idx >= 0 && (info.funcs[idx].locals.has(entry.name) || info.funcs[idx].declared.has(entry.name))) {
       const places = info.refs.filter((x) => x.name === entry.name && bindingOf(info, x, outside) === 'func:' + idx);
       places.push(...info.entries.filter((e) => e.owner === entry.owner && e.name === entry.name));
-      return { name: entry.name, ...single(places) };
+      return { name: entry.name, ...single(places, 'func:' + idx) };
     }
     return { error: `${entry.owner}.${entry.name} is an entry in a table, and only names can be renamed.` };
   }
@@ -165,7 +169,7 @@ async function everywhere(api, path, name) {
     return index.get(fileKey(p)) || null;
   };
   const start = await fetch(path);
-  if (!start) return [];
+  if (!start) return { files: [], clashes: () => [] };
 
   // Files joined by IMPORT, either way round.
   const targets = (e, kind) => e.info.imports.filter((i) => i.kind === kind).map((i) => resolvePath(e.file.path, i.file));
@@ -186,7 +190,7 @@ async function everywhere(api, path, name) {
   const out = new Map();
   const entry = (e) => {
     const k = fileKey(e.file.path);
-    if (!out.has(k)) out.set(k, { file: e.file, text: e.text, places: [], taken: (n) => takenIn(e.info, n) });
+    if (!out.has(k)) out.set(k, { file: e.file, text: e.text, places: [] });
     return out.get(k);
   };
   const shared = new Set([name]);
@@ -204,13 +208,52 @@ async function everywhere(api, path, name) {
       if (places.length) entry(e).places.push(...places);
     }
   }
+  // Every file joined by IMPORT shares outside names, so the new name is checked in all
+  // of them, even ones that don't use the old name.
+  const globals = new Set([...group.values()].flatMap((e) => [...e.info.globals.keys()]));
+  const clashes = (n) => [...group.values()]
+    .filter((e) => clashIn(e.info, n, out.get(fileKey(e.file.path))?.places || [], 'global', new Set([...globals, n])))
+    .map((e) => e.file.name);
   // The file you're in first, then by name.
-  return [...out.values()].sort((a, b) => (same(a.file.path, path) ? -1 : same(b.file.path, path) ? 1 : a.file.rel.localeCompare(b.file.rel)));
+  const sorted = [...out.values()].sort((a, b) => (same(a.file.path, path) ? -1 : same(b.file.path, path) ? 1 : a.file.rel.localeCompare(b.file.rel)));
+  return { files: sorted, clashes };
 }
 
-/** Whether a file already uses a name (anywhere, as any kind of name). */
-function takenIn(info, name) {
-  return info.refs.some((r) => r.name === name) || info.labels.some((l) => l.name === name) || info.loads.has(name);
+/**
+ * Whether renaming `places` (whose kind is `binding`, see bindingOf) to `n` in a file would
+ * mix them up with a name `n` that's already there.
+ */
+function clashIn(info, n, places, binding, outside) {
+  if (info.loads.has(n)) return true;
+  if (binding === 'label') return info.labels.some((l) => l.name === n);
+  const refs = info.refs.filter((r) => r.name === n);
+  if (!refs.length) return false;
+  const span = (list) => [Math.min(...list.map((x) => x.off)), Math.max(...list.map((x) => x.off))];
+  const placeIn = ([lo, hi]) => places.some((p) => p.off >= lo && p.off <= hi);
+  if (binding.startsWith('block:')) {
+    // A FOR or FAIL name: only its block matters.
+    const [lo, hi] = span(places);
+    return refs.some((r) => r.off >= lo && r.off <= hi);
+  }
+  if (binding.startsWith('func:')) {
+    const i = Number(binding.slice(5));
+    const f = info.funcs[i];
+    // Used in the function already; or, for a local made just by giving it a value,
+    // the new name exists outside, so that line would change the outside one instead.
+    const declared = places.some((p) => p.name && f.declared.has(p.name));
+    return refs.some((r) => r.func === i) || (!declared && (info.globals.has(n) || outside.has(n)));
+  }
+  // An outside name.
+  return refs.some((r) => {
+    const b = bindingOf(info, r, outside);
+    if (b === 'global') return true;
+    if (b.startsWith('func:')) {
+      const j = Number(b.slice(5));
+      // A function's own n would hide the renamed name there, or take it over if it's not declared.
+      return !info.funcs[j].declared.has(n) || places.some((p) => p.func === j);
+    }
+    return placeIn(span(refs.filter((x) => bindingOf(info, x, outside) === b)));
+  });
 }
 
 function list(names) {

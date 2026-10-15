@@ -57,34 +57,85 @@ struct Exit {
     code: Option<i32>,
 }
 
+/// How often output is sent to the window at most, so a program printing nonstop
+/// can't flood it with thousands of messages a second.
+const OUTPUT_EVERY: std::time::Duration = std::time::Duration::from_millis(30);
+/// Program output waiting to be sent past this is dropped from the front (the window
+/// only keeps the end of it anyway). Error output is never dropped: crash reports and
+/// debugger messages travel there.
+const OUTPUT_KEEP: usize = 1 << 20;
+
+struct Pending {
+    text: String,
+    done: bool,
+}
+
 /// Sends a stream's text to the window as it arrives. Reads in chunks rather than
-/// lines, so an INPUT prompt (which has no line ending) shows up straight away.
+/// lines, so an INPUT prompt (which has no line ending) shows up straight away; while
+/// output keeps coming, it's gathered and sent at most every OUTPUT_EVERY.
 fn pump(app: AppHandle, id: u32, stream: &'static str, mut r: impl Read + Send + 'static) -> std::thread::JoinHandle<()> {
+    let shared = Arc::new((Mutex::new(Pending { text: String::new(), done: false }), std::sync::Condvar::new()));
+    let reader = {
+        let shared = shared.clone();
+        std::thread::spawn(move || {
+            let (lock, ready) = &*shared;
+            let mut buf = [0u8; 8192];
+            let mut partial: Vec<u8> = Vec::new();
+            loop {
+                let n = match r.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                partial.extend_from_slice(&buf[..n]);
+                // Only send whole characters; keep a split character for the next read.
+                let valid = match std::str::from_utf8(&partial) {
+                    Ok(_) => partial.len(),
+                    Err(e) if e.error_len().is_none() => e.valid_up_to(),
+                    Err(_) => partial.len(),
+                };
+                if valid == 0 {
+                    continue;
+                }
+                let text = String::from_utf8_lossy(&partial[..valid]).into_owned();
+                partial.drain(..valid);
+                let mut p = lock.lock().unwrap();
+                p.text.push_str(&text);
+                if stream == "out" && p.text.len() > OUTPUT_KEEP {
+                    let mut cut = p.text.len() - OUTPUT_KEEP / 2;
+                    while !p.text.is_char_boundary(cut) {
+                        cut += 1;
+                    }
+                    p.text.drain(..cut);
+                }
+                ready.notify_one();
+            }
+            let mut p = lock.lock().unwrap();
+            if !partial.is_empty() {
+                p.text.push_str(&String::from_utf8_lossy(&partial));
+            }
+            p.done = true;
+            ready.notify_one();
+        })
+    };
     std::thread::spawn(move || {
-        let mut buf = [0u8; 8192];
-        let mut pending: Vec<u8> = Vec::new();
+        let (lock, ready) = &*shared;
         loop {
-            let n = match r.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => n,
+            let (text, done) = {
+                let mut p = lock.lock().unwrap();
+                while p.text.is_empty() && !p.done {
+                    p = ready.wait(p).unwrap();
+                }
+                (std::mem::take(&mut p.text), p.done)
             };
-            pending.extend_from_slice(&buf[..n]);
-            // Only send whole characters; keep a split character for the next read.
-            let valid = match std::str::from_utf8(&pending) {
-                Ok(_) => pending.len(),
-                Err(e) if e.error_len().is_none() => e.valid_up_to(),
-                Err(_) => pending.len(),
-            };
-            if valid > 0 {
-                let text = String::from_utf8_lossy(&pending[..valid]).into_owned();
-                pending.drain(..valid);
+            if !text.is_empty() {
                 let _ = app.emit("run-output", Output { id, stream, text });
             }
+            if done {
+                break;
+            }
+            std::thread::sleep(OUTPUT_EVERY);
         }
-        if !pending.is_empty() {
-            let text = String::from_utf8_lossy(&pending).into_owned();
-            let _ = app.emit("run-output", Output { id, stream, text });
-        }
+        let _ = reader.join();
     })
 }
 

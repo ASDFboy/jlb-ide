@@ -12,6 +12,17 @@ mod files;
 mod runner;
 mod windows;
 
+/// For the app's self-test (src/selftest.js): the folder to test with, in debug builds
+/// started with JLB_IDE_SELFTEST set. Release builds never run it.
+#[tauri::command]
+fn selftest_target() -> Option<String> {
+    if cfg!(debug_assertions) {
+        std::env::var("JLB_IDE_SELFTEST").ok()
+    } else {
+        None
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -19,6 +30,7 @@ pub fn run() {
         .manage(runner::Repl::default())
         .manage(backups::Backups::default())
         .invoke_handler(tauri::generate_handler![
+            selftest_target,
             files::read_text,
             files::write_text,
             files::list_dir,
