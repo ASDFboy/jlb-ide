@@ -182,7 +182,9 @@ A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` c
 | `addInterpreter({ id, name, description })` | Adds another interpreter to the Rust/C switch, with a path setting in Settings → Interpreters. It must support the [editor modes](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes). |
 | `current` | The chosen interpreter: `{ id, name, path }` (`path` is `null` if it isn't set up). |
 | `resolve(id)` | The same, for any interpreter. |
-| `start()`, `stop()` | Runs or stops the current file. |
+| `start(options)`, `stop()` | Runs or stops the current file. `start({ debug: true })` runs it under the debugger (with the Rust interpreter); add `stepFirst: true` to stop at the first line. |
+| `running` | The running program: `{ doc, interpreter, debug }`, or `null`. |
+| `debug(command)` | Sends a debugger command (`continue`, `step`, `over`, `out`, `pause`, `eval <id>⇥<expression>`, ...; see [`--debug`](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes)) to the program being debugged. Gives back `false` when nothing is being debugged. |
 
 ### `api.events`
 
@@ -197,9 +199,10 @@ A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` c
 | `folder-change` | the new folder path |
 | `workspace-restored` | nothing; the files from last time have been reopened |
 | `problems` | the list of problems, from every open file (each has a `file`) |
-| `run-start` | `{ doc, interpreter }` |
+| `run-start` | `{ doc, interpreter, debug, stepFirst }` |
 | `run-output` | `{ stream, text }` (`stream` is `"out"` or `"err"`) |
-| `run-exit` | `{ code, stopped, doc }` |
+| `run-exit` | `{ code, stopped, doc, debug }` |
+| `debug-event` | a message from the debugger, like `{ event: "paused", reason, path, line, stack, globals }` (see [`--debug`](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes)), plus `doc` |
 | `crash` | `{ report, doc }`; `report` is the [JSON crash report](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes) |
 | `settings-change` | `key, value` |
 

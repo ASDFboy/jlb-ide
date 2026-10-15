@@ -62,6 +62,15 @@ const ICONS = {
   terminal: '<path d="M4 5h16v14H4z"/><path d="M8 10l3 2-3 2M13 15h4"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.5M4 12h.5M4 18h.5"/>',
   bug: '<rect x="7" y="8" width="10" height="12" rx="5"/><path d="M12 8v12M7 13H3M21 13h-4M8 5l2 3M16 5l-2 3M4 8l3 2M20 8l-3 2M4 19l3-2M20 19l-3-2"/>',
+  pause: '<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>',
+  continue: '<path d="M5 5v14"/><path d="M9 5l11 7-11 7z" fill="currentColor" stroke="none"/>',
+  'step-over': '<path d="M4 14a8 8 0 0 1 14.5-4.5"/><path d="M19.5 4.5v5.5h-5.5"/><circle cx="12" cy="19" r="2" fill="currentColor"/>',
+  'step-into': '<path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><circle cx="12" cy="19.5" r="2" fill="currentColor"/>',
+  'step-out': '<path d="M12 14V4"/><path d="M8 8l4-4 4 4"/><circle cx="12" cy="19.5" r="2" fill="currentColor"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 10v10"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  code: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
+  dot: '<circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/>',
   save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
 };
 

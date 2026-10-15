@@ -28,8 +28,9 @@ import complete from './plugins/complete.js';
 import navigate from './plugins/navigate.js';
 import docs from './plugins/docs.js';
 import backups from './plugins/backups.js';
+import debuggerPlugin from './plugins/debugger.js';
 
-const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups];
+const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups, debuggerPlugin];
 
 async function start() {
   const ide = { events: new Emitter() };

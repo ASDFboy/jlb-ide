@@ -212,8 +212,10 @@ export class Layout {
   // ---------- toolbar and status bar ----------
 
   /** Adds an element to the toolbar (side "left" or "right"). */
-  addToolbar(el, side = 'left') {
-    (side === 'right' ? this.toolbarRight : this.toolbarLeft).append(el);
+  addToolbar(el, side = 'left', { first = false } = {}) {
+    const group = side === 'right' ? this.toolbarRight : this.toolbarLeft;
+    if (first) group.prepend(el);
+    else group.append(el);
     return () => el.remove();
   }
 

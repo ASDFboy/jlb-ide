@@ -521,6 +521,144 @@ test('keeps unsaved tabs when closing, and opens a backup apart if the file chan
   assert.equal(backupFiles().length, 0);
 });
 
+const clickGutter = async (line) => {
+  const p = await page.evaluate((n) => {
+    const v = window.jlbIde.editor.view;
+    const c = v.coordsAtPos(v.state.doc.line(n).from);
+    const g = document.querySelector('.cm-bp-gutter').getBoundingClientRect();
+    return { x: g.x + g.width / 2, y: (c.top + c.bottom) / 2 };
+  }, line);
+  await page.mouse.click(p.x, p.y);
+};
+/** The Variables section's rows, as "name = value". */
+const varRows = () => page.$$eval('.dbg-sec-variables .dbg-var', (rows) => rows.map((r) => `${r.querySelector('.dbg-name').textContent} = ${r.querySelector('.dbg-value').textContent}`));
+const editorLine = () => page.evaluate(() => {
+  const v = window.jlbIde.editor.view;
+  return v.state.doc.lineAt(v.state.selection.main.head).number;
+});
+
+test('the debugger stops at breakpoints, steps, and shows every variable', async () => {
+  const file = path.join(proj, 'game.jlb');
+  fs.writeFileSync(file, 'hero = [name: "Ann", hp: 10, bag: [1, 2]]\nFUNC heal(who, amount) {\n    LOCAL before = who.hp\n    who.hp += amount\n    RETURN who.hp - before\n}\ntotal = 0\nFOR i IN 1 TO 3 {\n    total += heal(hero, i)\n}\nname = INPUT("Name? ")\nPRINT("Hi", name, total)\nPRINT(10 / (total - 6))\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await clickGutter(4);
+  assert.equal(await page.locator('.bp-dot').count() >= 1, true);
+  await page.waitForTimeout(400); // breakpoints are remembered a moment later
+  assert.deepEqual(JSON.parse(await page.evaluate(() => window.jlbIde.settings.get('debugger.breakpoints')))[file], [4]);
+
+  // Run stops at the breakpoint, because one is set.
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.dbg-status.paused');
+  assert.match(await page.locator('.dbg-status').innerText(), /Stopped at heal\(\), line 4/);
+  assert.equal(await editorLine(), 4);
+  assert.equal(await page.locator('.cm-debug-line').count(), 1);
+  const stack = await page.locator('.dbg-stack').innerText();
+  assert.match(stack, /heal\(\)\s+game\.jlb:4\s+top level\s+game\.jlb:9/);
+  let rows = await varRows();
+  assert.ok(rows.includes('who = [name: "Ann", hp: 10, bag: [1, 2]]'), rows.join('\n'));
+  assert.ok(rows.includes('amount = 1') && rows.includes('before = 10') && rows.includes('total = 0'), rows.join('\n'));
+  // Tables open up to show their entries.
+  await page.click('.dbg-var.table:has(.dbg-name:text-is("who"))');
+  rows = await varRows();
+  assert.deepEqual(rows.slice(0, 4), ['who = 3 entries', 'name = "Ann"', 'hp = 10', 'bag = [1, 2]']);
+
+  // Watch an expression.
+  await page.fill('.dbg-watch-input', 'who.hp * 2');
+  await page.press('.dbg-watch-input', 'Enter');
+  await page.waitForSelector('.dbg-watch:has-text("20")');
+
+  // Hovering a name shows its value.
+  await page.mouse.move(5, 5);
+  const c = await coords(5, 'amount');
+  await page.mouse.move(c.x, c.y);
+  await page.waitForSelector('.hover-card:has-text("amount = 1")');
+
+  // Step over: the next line, and hp shows it changed.
+  await page.keyboard.press('F10');
+  await page.waitForFunction(() => document.querySelector('.dbg-status')?.innerText.includes('line 5'));
+  assert.equal(await editorLine(), 5);
+  // What changed since the last stop stands out: hp, and the table it's in.
+  assert.deepEqual(await page.$$eval('.dbg-sec-variables .dbg-var.changed', (rs) => rs.map((r) => r.querySelector('.dbg-name').textContent + ' = ' + r.querySelector('.dbg-value').textContent)), ['who = 3 entries', 'hp = 11']);
+  await page.waitForSelector('.dbg-watch:has-text("22")');
+
+  // Step out: back in the loop.
+  await page.keyboard.press('Shift+F11');
+  await page.waitForFunction(() => document.querySelector('.dbg-status')?.innerText.includes('line 9'));
+
+  // Remove the breakpoint and carry on: INPUT still works, then the error stops it.
+  await page.click('.dbg-bps .dbg-x', { force: true });
+  await page.waitForFunction(() => !document.querySelector('.dbg-bps'));
+  await page.keyboard.press('F8');
+  await page.waitForSelector('.out-input:not([disabled])');
+  await page.waitForFunction(() => document.querySelector('.out')?.innerText.includes('Name?'));
+  await page.fill('.out-input', 'Sam');
+  await page.press('.out-input', 'Enter');
+  await page.waitForSelector('.dbg-status.error');
+  assert.match(await page.locator('.dbg-status').innerText(), /can't divide by zero/);
+  assert.ok((await varRows()).includes('name = "Sam"'));
+  await page.keyboard.press('F8');
+  // The program ends with its crash report (the Crash panel opens).
+  await page.waitForFunction(() => !window.jlbIde.runner.run_);
+  await page.waitForSelector('.crash-msg:has-text("can\'t divide by zero")');
+  assert.match(await page.locator('.dbg-status').innerText(), /Not debugging/);
+  assert.equal(await page.locator('.cm-debug-line').count(), 0);
+  assert.equal(await page.locator('.dbg-strip').isVisible(), false);
+});
+
+test('Start debugging stops at the first line, and Pause stops a loop', async () => {
+  const file = path.join(proj, 'loop.jlb');
+  fs.writeFileSync(file, 'n = 0\nWHILE TRUE {\n    n += 1\n}\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.keyboard.press('F6');
+  await page.waitForSelector('.dbg-status.paused:has-text("line 1")');
+  assert.match(await page.locator('.out').innerText(), /Debugging loop\.jlb/);
+  await page.keyboard.press('F8');
+  await page.waitForSelector('.dbg-status.running');
+  await page.waitForTimeout(300);
+  await page.click('.dbg-strip .dbg-btn[title^="Pause"]');
+  await page.waitForSelector('.dbg-status.paused');
+  assert.match(await page.locator('.dbg-status').innerText(), /Paused/);
+  const n = Number((await page.locator('.dbg-var:has(.dbg-name:text-is("n")) .dbg-value').innerText()).trim());
+  assert.ok(n > 0, `n is ${n}`);
+  await page.keyboard.press('Shift+F5');
+  await page.waitForFunction(() => document.querySelector('.out')?.innerText.includes('Stopped'));
+  assert.equal(await page.locator('.dbg-strip').isVisible(), false);
+});
+
+test('breakpoints come back with their file, and Run ignores them when asked', async () => {
+  const file = path.join(proj, 'game.jlb');
+  await page.evaluate(() => window.jlbIde.commands.run('debug.clear'));
+  await page.evaluate(() => {
+    const ws = window.jlbIde.workspace;
+    for (const d of [...ws.docs]) ws.closeNow(d);
+  });
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, 'loop.jlb'));
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await clickGutter(12);
+  await page.evaluate(() => {
+    const ws = window.jlbIde.workspace;
+    ws.closeNow(ws.active);
+  });
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.evaluate(() => window.jlbIde.layout.showView('debug'));
+  await page.waitForTimeout(200);
+  assert.match(await page.locator('.dbg-bps').innerText(), /^game\.jlb\s+line 12$/);
+  assert.equal(await page.locator('.cm-bp-gutter .bp-dot:visible').count(), 1);
+  await page.evaluate(() => window.jlbIde.settings.set('debugger.stopAtBreakpoints', false));
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.out-input:not([disabled])');
+  await page.fill('.out-input', 'Al');
+  await page.press('.out-input', 'Enter');
+  await page.waitForFunction(() => !window.jlbIde.runner.run_);
+  await page.click('.panel-tab:has-text("Output")');
+  assert.match(await page.locator('.out').innerText(), /Running game\.jlb[\s\S]*Ended with an error/);
+  await page.evaluate(() => window.jlbIde.settings.set('debugger.stopAtBreakpoints', true));
+  await page.evaluate(() => window.jlbIde.commands.run('debug.clear'));
+  assert.equal(await page.locator('.cm-bp-gutter .bp-dot:visible').count(), 0);
+  await page.waitForFunction(() => !document.querySelector('.dbg-bps'));
+  assert.equal(await page.evaluate(() => window.jlbIde.settings.get('debugger.breakpoints')), '{}');
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

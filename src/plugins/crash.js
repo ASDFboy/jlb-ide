@@ -79,6 +79,8 @@ export default {
       } else setTimeout(mark, 30);
     });
     api.events.on('run-start', () => {
+      // The report stays readable, but its values no longer describe the running program.
+      if (last) last.stale = true;
       api.layout.setBadge('crash', '');
       api.editor.view.dispatch({ effects: setMark.of(Decoration.none) });
     });
@@ -160,7 +162,7 @@ export default {
 
     // ---------- values on hover ----------
     api.language.addHover(({ word, op }) => {
-      if (!last || !word || op || !api.settings.get('hoverValues') || !inProgram(last, api.workspace.active)) return null;
+      if (!last || last.stale || !word || op || !api.settings.get('hoverValues') || !inProgram(last, api.workspace.active)) return null;
       if (!/^[a-z_][a-z0-9_]*$/.test(word.text)) return null;
       const r = last.report;
       for (const g of [...r.frames.map((f) => ({ where: `in ${f.name}()`, vars: f.vars })), { where: 'outside functions', vars: r.outside }]) {
