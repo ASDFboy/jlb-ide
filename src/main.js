@@ -27,8 +27,9 @@ import quicktry from './plugins/quicktry.js';
 import complete from './plugins/complete.js';
 import navigate from './plugins/navigate.js';
 import docs from './plugins/docs.js';
+import backups from './plugins/backups.js';
 
-const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs];
+const BUILT_IN = [crash, explainer, checker, quicktry, complete, navigate, docs, backups];
 
 async function start() {
   const ide = { events: new Emitter() };
@@ -141,7 +142,7 @@ function statusBar(ide) {
 
 /** Asks about unsaved changes before the window closes. */
 function guardClose(ide) {
-  const unsaved = () => ide.workspace.docs.filter((d) => ide.workspace.isDirty(d === ide.workspace.active ? { state: ide.editor.view.state, saved: d.saved } : d));
+  const unsaved = () => ide.workspace.docs.filter((d) => ide.workspace.isDirty(d));
   if (!inTauri) {
     window.addEventListener('beforeunload', (e) => {
       if (unsaved().length) e.preventDefault();
@@ -154,7 +155,13 @@ function guardClose(ide) {
     if (closing) return;
     e.preventDefault();
     const list = unsaved();
-    if (list.length) {
+    const backups = ide.plugins.services.get('backups');
+    let keep = false;
+    if (list.length && backups?.keepOnClose()) {
+      // Unsaved tabs stay as they are and come back next time.
+      await backups.flush();
+      keep = true;
+    } else if (list.length) {
       const names = list.map((d) => d.name).join(', ');
       const answer = await choose(`Save changes before closing?`, [
         { label: "Don't save", value: 'discard', danger: true },
@@ -166,6 +173,7 @@ function guardClose(ide) {
         for (const d of list) if (!(await ide.workspace.save(d, { quiet: true }))) return;
       }
     }
+    await backups?.close(keep);
     closing = true;
     await ide.settings.saveNow();
     if (ide.runner.run_) await ide.runner.stop(true);

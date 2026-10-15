@@ -41,7 +41,11 @@ export class Language {
     s.onChange('editor.hoverDelay', () => this.rebuild());
     s.onChange('editor.suggest', () => this.rebuild());
     s.onChange('editor.checkDelay', () => this.rebuild());
-    ide.events.on('active-change', () => {
+    let shown = null;
+    ide.events.on('active-change', (doc) => {
+      // The tab being left may not have been checked since its last edit.
+      if (shown && shown !== doc) this.queueCheck(shown);
+      shown = doc;
       this.publish();
       this.recheck();
     });

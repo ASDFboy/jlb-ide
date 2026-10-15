@@ -58,13 +58,38 @@ before(async () => {
   server = spawn(process.execPath, ['scripts/dev-server.mjs', String(PORT)], { env: { ...process.env, JLB_IDE_CONFIG: config }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => server.stdout.once('data', res));
   browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+  await openPage();
+});
+
+/** Opens the IDE in a new page, like starting it again. */
+async function openPage() {
   page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark' });
   page.on('pageerror', (e) => errors.push(e.message));
   // Stopping a Quick-try snippet makes its pending call fail on purpose.
   page.on('console', (m) => m.type() === 'error' && !m.location().url?.endsWith('/__bridge/repl_eval') && errors.push(`${m.text()} (${m.location().url})`));
   await page.goto(URL_);
   await page.waitForSelector('body.ready');
-});
+}
+
+/** Closes the IDE's page without any clean-up (like a crash), then opens it again. */
+async function restartIde({ crash = true } = {}) {
+  await page.evaluate(() => window.jlbIde.settings.saveNow());
+  await page.close({ runBeforeUnload: false });
+  if (crash) {
+    // A crashed IDE's "alive" file stops being touched; make it look a minute old.
+    const root = path.join(config, 'backups');
+    const old = new Date(Date.now() - 60000);
+    for (const d of fs.readdirSync(root)) if (fs.existsSync(path.join(root, d, 'alive'))) fs.utimesSync(path.join(root, d, 'alive'), old, old);
+  }
+  await fetch(URL_ + '__test/restart', { method: 'POST' });
+  await openPage();
+}
+
+const backupFiles = () => {
+  const root = path.join(config, 'backups');
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root).flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(root, d, f), 'utf8'))));
+};
 
 after(async () => {
   await browser?.close();
@@ -417,6 +442,83 @@ test('installs a plugin from a folder, and reloads it when its files change', as
   fs.writeFileSync(path.join(config, 'plugins', 'hello-folder', 'main.js'), main('HELLO 2'));
   await page.waitForSelector('.hello-status:has-text("HELLO 2")', { timeout: 8000 });
   assert.equal(await page.locator('.hello-status').count(), 1);
+});
+
+test('backs up unsaved changes, and removes the backup on saving', async () => {
+  await page.evaluate(() => window.jlbIde.settings.set('backups.delay', 1));
+  // Start from no tabs (closing without saving drops their backups).
+  await page.evaluate(() => {
+    const ws = window.jlbIde.workspace;
+    for (const d of [...ws.docs]) ws.closeNow(d);
+  });
+  await page.waitForTimeout(300);
+  assert.equal(backupFiles().length, 0);
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, 'guess.jlb'));
+  await page.click('.cm-content');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('PRINT("backed up")');
+  await page.waitForTimeout(1600);
+  const found = backupFiles().find((b) => b.path === path.join(proj, 'guess.jlb'));
+  assert.ok(found, 'a backup was written');
+  assert.match(found.text, /PRINT\("backed up"\)$/);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(1600);
+  assert.equal(backupFiles().filter((b) => b.path === path.join(proj, 'guess.jlb')).length, 0, 'undoing everything removes the backup');
+  await page.keyboard.type('\n>> saved');
+  await page.waitForTimeout(1600);
+  assert.equal(backupFiles().length, 1);
+  await page.evaluate(() => window.jlbIde.commands.run('file.save'));
+  await page.waitForTimeout(400);
+  assert.equal(backupFiles().length, 0, 'saving removes the backup');
+});
+
+test('brings back unsaved work after a crash', async () => {
+  const file = path.join(proj, 'crash.jlb');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.click('.cm-content');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('PRINT("not saved")');
+  await page.evaluate(() => window.jlbIde.workspace.newFile(''));
+  await page.click('.cm-content');
+  await page.keyboard.type('x = "an untitled tab"');
+  await page.waitForTimeout(1600);
+  assert.equal(backupFiles().length, 2);
+  await restartIde();
+  await page.waitForSelector('.toast:has-text("Brought back unsaved changes to crash.jlb")');
+  const tabs = await page.evaluate(() => window.jlbIde.workspace.docs.map((d) => ({ name: d.name, path: d.path, text: window.jlbIde.workspace.textOf(d), dirty: window.jlbIde.workspace.isDirty(d) })));
+  const c = tabs.find((t) => t.path === file);
+  assert.ok(c.dirty && c.text.endsWith('PRINT("not saved")'), 'the file got its unsaved changes back');
+  assert.ok(tabs.some((t) => !t.path && t.dirty && t.text === 'x = "an untitled tab"'), 'the untitled tab came back');
+  assert.equal(fs.readFileSync(file, 'utf8').includes('not saved'), false, 'the file itself is untouched');
+  assert.equal(backupFiles().length, 2, 'the tabs are backed up again by the new session');
+  assert.equal(fs.readdirSync(path.join(config, 'backups')).length, 1, 'the old session\'s backups are gone');
+});
+
+test('keeps unsaved tabs when closing, and opens a backup apart if the file changed', async () => {
+  const file = path.join(proj, 'crash.jlb');
+  // Close "keeping unsaved changes" (what the window does with that setting on).
+  await page.evaluate(async () => {
+    const b = window.jlbIde.plugins.services.get('backups');
+    await b.flush();
+    await b.close(true);
+  });
+  // Meanwhile, the file is changed by something else.
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + '>> changed elsewhere\n');
+  await restartIde({ crash: false });
+  await page.waitForSelector('.toast:has-text("changed since the backup")');
+  const tabs = await page.evaluate(() => window.jlbIde.workspace.docs.map((d) => ({ name: d.name, path: d.path, text: window.jlbIde.workspace.textOf(d), dirty: window.jlbIde.workspace.isDirty(d) })));
+  const c = tabs.find((t) => t.path === file);
+  assert.ok(c && !c.dirty && c.text.includes('changed elsewhere'), 'the file shows what is on disk');
+  const apart = tabs.find((t) => t.name === 'crash (backup).jlb');
+  assert.ok(apart && apart.dirty && apart.text.endsWith('PRINT("not saved")'), 'the backup opened in its own tab');
+  assert.ok(tabs.some((t) => t.text === 'x = "an untitled tab"'));
+  // Closing a tab without saving drops its backup.
+  await page.evaluate(() => {
+    const ws = window.jlbIde.workspace;
+    for (const d of [...ws.docs]) if (!d.path) ws.closeNow(d);
+  });
+  await page.waitForTimeout(300);
+  assert.equal(backupFiles().length, 0);
 });
 
 test('no errors in the page', () => {

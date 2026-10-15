@@ -31,7 +31,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 
 ### Everyday editing
 
-Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions and `POINT`s, find and replace, a command palette, a Monokai color theme (night and day versions), and your folder and files reopened where you left them.
+Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions and `POINT`s, find and replace, a command palette, a Monokai color theme (night and day versions), your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
 
 ### Settings for everything
 

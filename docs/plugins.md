@@ -135,6 +135,10 @@ A plain key like `"showInStatusBar"` is your plugin's own: it's stored as `word-
 | `folder` | The open folder's path, or `null`. |
 | `openFile(path)`, `newFile(text)`, `save()` | Open, create and save files. |
 | `textOf(file)` | Any open file's current text. |
+| `isDirty(file)` | `true` when the file has unsaved changes. |
+| `setText(file, text)` | Replaces a file's text as an edit (it can be undone, and shows as unsaved). |
+| `activate(file)` | Switches to an open file's tab. |
+| `restored` | `true` once the files from last time have been reopened. |
 
 ### `api.layout`
 
@@ -191,7 +195,8 @@ A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` c
 | `editor-change` | a CodeMirror update, after the text changes |
 | `editor-cursor` | the editor state, after the cursor moves |
 | `folder-change` | the new folder path |
-| `problems` | the list of problems |
+| `workspace-restored` | nothing; the files from last time have been reopened |
+| `problems` | the list of problems, from every open file (each has a `file`) |
 | `run-start` | `{ doc, interpreter }` |
 | `run-output` | `{ stream, text }` (`stream` is `"out"` or `"err"`) |
 | `run-exit` | `{ code, stopped, doc }` |

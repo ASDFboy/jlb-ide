@@ -2,9 +2,11 @@
 //
 // files.rs   reading, writing and listing files
 // runner.rs  running programs, syntax checks and Quick-try sessions through jlb
+// backups.rs backups of unsaved work, brought back after a crash
 // config.rs  settings, the plugins folder, and finding the interpreters
 // windows.rs "Edit with JLB IDE" for .jlb files (Windows only)
 
+mod backups;
 mod config;
 mod files;
 mod runner;
@@ -15,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(runner::Runs::default())
         .manage(runner::Repl::default())
+        .manage(backups::Backups::default())
         .invoke_handler(tauri::generate_handler![
             files::read_text,
             files::write_text,
@@ -30,6 +33,12 @@ pub fn run() {
             runner::repl_eval,
             runner::repl_answer,
             runner::repl_reset,
+            backups::backup_write,
+            backups::backup_delete,
+            backups::backup_heartbeat,
+            backups::backup_close,
+            backups::backup_leftovers,
+            backups::backup_forget,
             config::load_settings,
             config::save_settings,
             config::list_plugins,
