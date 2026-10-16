@@ -186,6 +186,8 @@ A problem is `{ line, col, endCol, severity, message, fix }`. `line` and `col` c
 | `addInterpreter({ id, name, description })` | Adds another interpreter to the Rust/C switch, with a path setting in Settings → Interpreters. It must support the [editor modes](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes). |
 | `current` | The chosen interpreter: `{ id, name, path }` (`path` is `null` if it isn't set up). |
 | `resolve(id)` | The same, for any interpreter. |
+| `pinned(doc)` | The interpreter a file chooses on its first line (`>> @interpreter c`): its id, or `null`. |
+| `forDoc(doc)` | The interpreter that runs a file: the one its first line chooses, or else `current`. |
 | `start(options)`, `stop()` | Runs or stops the current file. `start({ debug: true })` runs it under the debugger (with the Rust interpreter); add `stepFirst: true` to stop at the first line. |
 | `running` | The running program: `{ doc, interpreter, debug }`, or `null`. |
 | `debug(command)` | Sends a debugger command (`continue`, `step`, `over`, `out`, `pause`, `eval <id>⇥<expression>`, ...; see [`--debug`](https://github.com/ASDFboy/jlb-rust/blob/main/docs/09-programs-and-files.md#editor-modes)) to the program being debugged. Gives back `false` when nothing is being debugged. |

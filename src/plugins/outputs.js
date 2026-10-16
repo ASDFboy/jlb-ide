@@ -1,11 +1,14 @@
 // Shared by the Compare and Tests features: running a program to the end and
 // comparing what it printed, line by line.
 
-/** Runs a file to the end with `input` typed in: { text, code, ms, timedOut } or { error }. */
-export async function runToEnd(api, interpreter, path, { input = '', timeout = 10000 } = {}) {
+/**
+ * Runs a file to the end with `input` typed in: { text, code, ms, timedOut } or { error }.
+ * With `stay`, that interpreter runs it even if its first line asks for the other one.
+ */
+export async function runToEnd(api, interpreter, path, { input = '', timeout = 10000, stay = false } = {}) {
   const cwd = path.replace(/[\\/][^\\/]*$/, '');
   try {
-    const r = await api.invoke('run_capture', { interpreter, file: path, cwd, args: [], input, timeout_ms: timeout });
+    const r = await api.invoke('run_capture', { interpreter, file: path, cwd, args: [], input, timeout_ms: timeout, stay });
     // What a person sees: the program's output, then any error report.
     return { text: normalize(r.stdout + r.stderr), code: r.code, ms: r.ms, timedOut: r.timed_out };
   } catch (e) {

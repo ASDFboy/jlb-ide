@@ -428,6 +428,16 @@ kbd,
   opacity: 0.6;
 }
 
+.seg-btn:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.seg-btn .icon {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
 .run-btn {
   display: flex;
   align-items: center;

@@ -1116,6 +1116,41 @@ test('a program printing a lot keeps the window responsive and shows the end', a
   assert.equal(last, 'line 20000');
 });
 
+test('the first line chooses the interpreter; CONST and tasks', async () => {
+  const file = path.join(proj, 'pinned.jlb');
+  fs.writeFileSync(file, '>> @interpreter c\nFUNC twice(n) {\n    WAIT(0.01)\n    RETURN n * 2\n}\nCONST base = [x: 1]\nt = START twice(21)\nPRINT(TYPE(t), AWAIT(t), DONE(t), base.x)\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.waitForSelector('.tab.active:has-text("pinned.jlb")');
+  // The switch shows C, locked, whatever was chosen.
+  await page.evaluate(() => window.jlbIde.settings.set('run.interpreter', 'rust'));
+  await page.waitForSelector('.seg-btn.on:has-text("C") .icon');
+  assert.equal(await page.locator('.seg-btn:has-text("Rust")').isDisabled(), true);
+  assert.ok(await page.isVisible('button.status-item:has-text("C interpreter (chosen by this file)")'));
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.out-line:has-text("Finished")', { timeout: 10000 });
+  const out = await page.locator('div.out').innerText();
+  assert.match(out, /Running pinned\.jlb with C/);
+  assert.match(out, /TASK 42 TRUE 1/);
+  // Debugging needs Rust, so a file choosing C says so instead of quietly switching.
+  await page.evaluate(() => window.jlbIde.runner.run({ debug: true, stepFirst: true }));
+  await page.waitForSelector('.out-line:has-text("debugging only works with Rust")');
+
+  // Highlighting, and the checker's warnings.
+  await setText('>> @interpreter go\nCONST limit = 3\nlimit += 1\n>> @interpreter c\n');
+  assert.equal(await page.locator('.cm-line').first().locator('span').first().evaluate((s) => getComputedStyle(s).fontStyle), 'italic');
+  const probs = await problems();
+  assert.match(probs, /no interpreter called "go"/);
+  assert.match(probs, /limit is a constant \(CONST on line 2\), so it can't be changed/);
+  assert.match(probs, /Only the first line can choose the interpreter/);
+  // Not a valid choice: the switch is free again.
+  assert.equal(await page.locator('.seg-btn:has-text("Rust")').isDisabled(), false);
+  assert.match(await hoverText(2, 'CONST'), /can never change/);
+  await setText('t = START walk()\nPRINT(AWAIT(t))\n');
+  assert.match(await hoverText(1, 'START'), /runs the function as a task/);
+  assert.match(await hoverText(2, 'AWAIT'), /Waits until the task/);
+  await page.evaluate(() => window.jlbIde.workspace.save());
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });

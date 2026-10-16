@@ -19,6 +19,8 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
   - A name used where it doesn't exist: one that's only given a value inside another function, or a `FOR` or `FAIL` name used after its block.
   - A variable or function used above the line that gives it a value (top-level code runs in order).
   - A `GOTO` with no matching `POINT`.
+  - Changing a constant (`CONST`), or the tables inside it, and a `CONST` for a name that already has a value.
+  - A first-line `>> @interpreter` that names no interpreter, or one that isn't on the first line.
   - An `IMPORT` or `LOAD` whose file isn't there, and `tools.nmae` when the file `LOAD` brought in has no `nmae`.
 - **Find in files and rename everywhere.** Ctrl+Shift+F searches every file in the folder (and unsaved changes in open tabs), with match case, whole word and pattern options and a filter like `*.jlb`; each result opens the file at the match. Replace shows what each match becomes before you replace them all (with `$1` from a pattern), and one click undoes it. F2 on a name renames it everywhere it means the same thing: a function's own local stays inside that function, while an outside name changes in every file joined by `IMPORT` and as `tools.name` in files that `LOAD` it. A name that's already taken or isn't allowed (`myScore`) is caught first.
 - **Formatter.** Alt+Shift+F tidies spacing and indentation the same way every time (`x=1+2` → `x = 1 + 2`, `PRINT ( a,b )` → `PRINT(a, b)`, blocks indented), for the whole file or just the selected lines, and optionally on every save. It never changes what the code does: lines stay where they are, text in quotes and comments are left exactly as written, and every line is checked to have the same pieces afterwards.
@@ -28,9 +30,9 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 - **Crash report viewer.** When a program crashes, a panel shows the error, the function calls and every variable's value in a table. The crashing line is marked in your code, and resting the mouse on a variable shows what it held when the program crashed.
 - **Quirk explainer.** Rest the mouse on any operator, command or keyword for a plain-English explanation: how `&` differs from `&&`, what `!%` and `!^` do, why `!=` is an error, what `0xFF` equals. Your own functions show their inputs, and which ones are shared with `@`.
 - **Quick-try console.** Type a bit of .jlb and see the result and its type right away: `"25" * 2` gives `"2525"` (TEXT). Variables carry over between snippets, `INPUT` asks right in the panel, and a snippet stuck in a loop can be stopped. Select code in the editor and press Ctrl+Enter to try it, or load the whole file to try out its functions.
-- **Run with Rust or C.** Both interpreters come with the IDE; switch with one click in the toolbar. Programs that use `INPUT` work: type your answer in the Output panel.
-- **Compare Rust and C.** Ctrl+Shift+F5 runs the current file with both and shows the two outputs side by side, with any differences marked and which one was faster.
-- **Test runner.** A test is a program with a `.out` file next to it holding what it should print (and a `.in` file with its `INPUT` answers, if it needs any). The Tests panel finds them in your folder, runs them with either interpreter or both, and shows exactly what differs. One click makes a program's current output its expected output, or makes the current file a test.
+- **Run with Rust or C.** Both interpreters come with the IDE; switch with one click in the toolbar. A file whose first line is `>> @interpreter c` (or `rust`) always runs with that one, and the switch shows it locked. Programs that use `INPUT` work: type your answer in the Output panel.
+- **Compare Rust and C.** Ctrl+Shift+F5 runs the current file with both (even one that chooses its interpreter) and shows the two outputs side by side, with any differences marked and which one was faster.
+- **Test runner.** A test is a program with a `.out` file next to it holding what it should print (and a `.in` file with its `INPUT` answers, if it needs any). The Tests panel finds them in your folder, runs them with either interpreter or both (with just one, a test that chooses its interpreter on its first line uses that one), and shows exactly what differs. One click makes a program's current output its expected output, or makes the current file a test.
 - **The language guide, built in.** The whole .jlb reference in the sidebar, searchable, with a button to open any example as a new file.
 
 ![Stopped at a breakpoint, with the variables in the Debug view and a table open in the table viewer](docs/images/debugger.png)
@@ -62,7 +64,7 @@ Anyone can add features with a plugin: a folder with a `plugin.json` and a `main
 ## Good to know
 
 - **The Windows downloads aren't code-signed** (a signing certificate costs money every year), so Windows SmartScreen may warn the first time. Choose **More info → Run anyway**.
-- **The debugger needs the Rust interpreter.** With C chosen, Run ignores breakpoints, and Start debugging switches to Rust for that run.
+- **The debugger needs the Rust interpreter.** With C chosen, Run ignores breakpoints, and Start debugging switches to Rust for that run. A file that chooses C on its first line can't be debugged until that line changes.
 - **Plugins are trusted code.** They can read and change your files and run programs, like extensions in other editors, so only install plugins you trust.
 - **Ready-made downloads are Windows only for now.** On macOS and Linux, [build it from source](#building-from-source).
 

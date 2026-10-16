@@ -74,6 +74,7 @@ const ICONS = {
   dot: '<circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/>',
   save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
   replace: '<path d="M4 8h14l-4-4"/><path d="M20 16H6l4 4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
 };
 
 /** An inline SVG icon by name (plugins can pass their own SVG path markup instead). */

@@ -1,7 +1,8 @@
 // Live mistake checking: the interpreter's own syntax check, plus warnings for
 // the .jlb quirks that trip people up.
 
-import { scan, loadName } from './scan.js';
+import { scan, loadName, bindingOf } from './scan.js';
+import { askedInterpreter } from '../lang/data.js';
 import { linked, dependents, forgetLooked } from './linked.js';
 import { basename } from '../core/paths.js';
 
@@ -17,6 +18,7 @@ export default {
     { key: 'undefined', title: 'Warn about names that are never given a value', description: 'Catches typos like PRINT(scroe). Names from files brought in with IMPORT and LOAD count too.', type: 'boolean', default: true },
     { key: 'imports', title: 'Warn when IMPORT or LOAD can\'t find its file', description: 'Also catches tool.nmae typos for tables made by LOAD.', type: 'boolean', default: true },
     { key: 'gotoPoint', title: 'Warn about GOTO with no matching POINT', type: 'boolean', default: true },
+    { key: 'constants', title: 'Warn when a constant (CONST) is changed', description: 'Changing a constant, or the tables inside it, is an error when the program runs.', type: 'boolean', default: true },
   ],
   activate(api) {
     let warnedMissing = false;
@@ -63,6 +65,8 @@ export default {
         if (api.settings.get('andOr')) out.push(...andOrCrashes(info));
         if (api.settings.get('textCompare')) out.push(...textCompares(info));
         if (api.settings.get('gotoPoint')) out.push(...gotoPoints(info));
+        if (api.settings.get('constants')) out.push(...constChanges(info));
+        out.push(...interpreterLine(text));
         const wantNames = api.settings.get('undefined');
         const wantImports = api.settings.get('imports');
         if (!wantNames && !wantImports) return out;
@@ -93,6 +97,56 @@ export default {
     api.onDispose(() => clearTimeout(timer));
   },
 };
+
+/** Changes to a CONST name, or to the tables inside it (errors when the program runs). */
+function constChanges(info) {
+  const out = [];
+  if (!info.consts.length) return out;
+  const declAt = new Set(info.consts.map((c) => c.off));
+  const decls = new Map(); // where the name lives + name -> its CONST
+  const key = (r) => bindingOf(info, r) + '\0' + r.name;
+  for (const r of info.refs) {
+    if (!declAt.has(r.off)) continue;
+    const at = info.at(r.off);
+    const span = { line: at.line, col: at.col, endCol: at.col + r.name.length, severity: 'warning' };
+    const c = decls.get(key(r));
+    if (c) out.push({ ...span, message: `${r.name} is already a constant (CONST on line ${c.line}), so this CONST will be an error. CONST makes a new name.` });
+    else decls.set(key(r), { ...r, line: at.line });
+  }
+  for (const r of info.refs) {
+    if (!r.write || declAt.has(r.off)) continue;
+    const c = decls.get(key(r));
+    if (!c) continue;
+    const at = info.at(r.off);
+    const span = { line: at.line, col: at.col, endCol: at.col + r.name.length, severity: 'warning' };
+    if (r.off < c.off && r.func === c.func) {
+      out.push({ ...span, message: `${r.name} gets a value here, before CONST ${r.name} on line ${c.line}, so that CONST will be an error: CONST makes a new name.` });
+    } else {
+      const what = r.write === 'entry' ? `${r.name} is a constant (CONST on line ${c.line}), so the tables inside it can't be changed either.` : `${r.name} is a constant (CONST on line ${c.line}), so it can't be changed.`;
+      out.push({ ...span, message: `${what} Copy it into another name to change the copy.` });
+    }
+  }
+  return out;
+}
+
+/** >> @interpreter on the first line: a name the interpreters know, and only on line 1. */
+function interpreterLine(text) {
+  const out = [];
+  const asked = askedInterpreter(text);
+  const all = String(text).replace(/\r/g, '').split('\n');
+  const first = all[0];
+  const col = first.indexOf('@') + 1;
+  if (asked != null && asked !== 'rust' && asked !== 'c') {
+    out.push({ line: 1, col, endCol: first.length + 1, severity: 'error', message: `There's no interpreter called "${asked}". Use >> @interpreter rust or >> @interpreter c.` });
+  } else if (asked == null && /^﻿?\s*>>\s*@interpreter/i.test(first) && !first.trim().startsWith('>>>')) {
+    out.push({ line: 1, col, endCol: first.length + 1, severity: 'warning', message: 'This isn\'t read as an interpreter line, so it\'s just a comment. Write it as >> @interpreter rust or >> @interpreter c.' });
+  }
+  for (let i = 1; i < all.length && i < 5000; i++) {
+    const m = all[i].match(/^\s*>>\s*@interpreter\s/);
+    if (m) out.push({ line: i + 1, col: all[i].indexOf('@') + 1, endCol: all[i].length + 1, severity: 'warning', message: 'Only the first line can choose the interpreter, so this is just a comment. Move it to line 1.' });
+  }
+  return out;
+}
 
 /** One-click fixes for the interpreter's suggestions. */
 function fixFor(message) {

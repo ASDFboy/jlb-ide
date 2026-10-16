@@ -46,9 +46,13 @@ function stringBody(stream, state) {
 
 export const jlbStream = {
   name: 'jlb',
-  startState: () => ({ inString: null, inBlock: false, depth: 0, prev: null }),
+  startState: () => ({ inString: null, inBlock: false, depth: 0, prev: null, line: 0 }),
   copyState: (s) => ({ ...s }),
+  blankLine(state) {
+    state.line++;
+  },
   token(stream, state) {
+    if (stream.sol()) state.line++;
     if (state.inBlock) {
       if (stream.skipTo('<<<')) {
         stream.pos += 3;
@@ -64,6 +68,11 @@ export const jlbStream = {
       return 'blockComment';
     }
     if (stream.match('>>')) {
+      // The first line can choose the interpreter: >> @interpreter rust (or c).
+      if (state.line === 1 && !stream.string.slice(0, stream.start).trim() && stream.match(/^\s*@interpreter\s/, false)) {
+        stream.skipToEnd();
+        return 'meta';
+      }
       stream.skipToEnd();
       return 'lineComment';
     }
@@ -104,7 +113,7 @@ export const jlbStream = {
       if (prev === 'FUNC') return 'variableName.function.definition';
       if (prev === 'POINT' || prev === 'GOTO') return 'labelName';
       if (prev === '.') return 'propertyName';
-      if (prev === 'LOCAL' || prev === 'FOR' || prev === 'FAIL') return 'variableName.definition';
+      if (prev === 'LOCAL' || prev === 'CONST' || prev === 'FOR' || prev === 'FAIL') return 'variableName.definition';
       if (stream.match(/^\s*\(/, false)) return 'variableName.function';
       return 'variableName';
     }
@@ -162,6 +171,7 @@ export const jlbStyle = HighlightStyle.define([
   { tag: t.string, color: 'var(--syn-string)' },
   { tag: t.escape, color: 'var(--syn-escape)', fontWeight: '600' },
   { tag: [t.lineComment, t.blockComment], color: 'var(--syn-comment)', fontStyle: 'italic' },
+  { tag: t.meta, color: 'var(--syn-keyword)', fontStyle: 'italic' },
   { tag: [t.logicOperator, t.compareOperator], color: 'var(--syn-logic)' },
   { tag: [t.arithmeticOperator, t.definitionOperator, t.derefOperator], color: 'var(--syn-operator)' },
   { tag: t.modifier, color: 'var(--syn-share)', fontWeight: '600' },
