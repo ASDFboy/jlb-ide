@@ -173,6 +173,13 @@ test('explains operators and commands on hover', async () => {
   assert.match(await hoverText(2, 'IF'), /truth|true/i);
 });
 
+test('knows the graphics commands', async () => {
+  await setText('WINDOW(200, 100, "Demo", 2)\nWHILE WINDOW_OPEN() {\n    CLEAR("navy")\n    CIRCLE(MOUSE().x, MOUSE().y, 10, "red", [alpha: 128])\n    SHOW()\n}\n');
+  assert.match(await hoverText(4, 'CIRCLE'), /CIRCLE\(x, y, radius, color/);
+  assert.match(await hoverText(1, 'WINDOW'), /bottom-left/);
+  assert.doesNotMatch(await problems(), /did you mean|isn't/);
+});
+
 test('suggests commands while typing', async () => {
   await setText('');
   await page.click('.cm-content');
