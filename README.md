@@ -35,6 +35,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 - **Compare Rust and C.** Ctrl+Shift+F5 runs the current file with both (even one that chooses its interpreter) and shows the two outputs side by side, with any differences marked and which one was faster.
 - **Test runner.** A test is a program with a `.out` file next to it holding what it should print (and a `.in` file with its `INPUT` answers, if it needs any). The Tests panel finds them in your folder, runs them with either interpreter or both (with just one, a test that chooses its interpreter on its first line uses that one), and shows exactly what differs. One click makes a program's current output its expected output, or makes the current file a test.
 - **The language guide, built in.** The whole .jlb reference in the sidebar, searchable, with a button to open any example as a new file.
+- **Graphics programs just run.** A program that opens a `WINDOW` gets its own window when you press Run (with either interpreter), and Stop closes it. Every graphics command (`CIRCLE`, `TEXT`, `KEY_DOWN`, `ON_CLICK` ...) is highlighted, suggested as you type and explained on hover, with its own page in the guide.
 
 ![Stopped at a breakpoint, with the variables in the Debug view and a table open in the table viewer](docs/images/debugger.png)
 

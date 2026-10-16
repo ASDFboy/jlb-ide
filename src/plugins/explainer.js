@@ -20,7 +20,7 @@ export default {
     { key: 'numbers', title: 'Show what hex and scientific numbers equal', type: 'boolean', default: true },
   ],
   activate(api) {
-    const { OPERATORS, BUILTINS, KEYWORD_HELP } = api.jlb;
+    const { OPERATORS, BUILTINS, KEYWORD_HELP, GRAPHICS = {} } = api.jlb;
     const more = (page, anchor) => {
       const docs = api.use('docs');
       return docs ? { label: 'Read more in the language guide', run: () => docs.show(page, anchor) } : undefined;
@@ -45,7 +45,7 @@ export default {
       if (!word || inComment || insideString(before)) return null;
       const w = word.text;
       if (/^[A-Z_]+$/.test(w)) {
-        if (BUILTINS[w] && api.settings.get('commands')) return { title: BUILTINS[w][0], body: BUILTINS[w][1], more: more('built-ins') };
+        if (BUILTINS[w] && api.settings.get('commands')) return { title: BUILTINS[w][0], body: BUILTINS[w][1], more: more(GRAPHICS[w] ? 'graphics' : 'built-ins') };
         if (KEYWORD_HELP[w] && api.settings.get('keywords')) return { title: w, body: KEYWORD_HELP[w], more: more('control-flow') };
         return null;
       }
