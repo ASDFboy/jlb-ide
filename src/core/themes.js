@@ -36,7 +36,7 @@ export const COLOR_GROUPS = [
     ['--backdrop', 'Behind dialogs'],
   ]],
   ['Code', [
-    ['--syn-keyword', 'Keywords (IF, FOR, FUNC)'],
+    ['--syn-keyword', 'Keywords (IF, FOR, DEF)'],
     ['--syn-command', 'Built-in commands (PRINT, LEN)'],
     ['--syn-func', 'Function names'],
     ['--syn-def', 'Names being made (LOCAL x, FOR x)'],

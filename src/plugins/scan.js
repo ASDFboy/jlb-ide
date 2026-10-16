@@ -104,7 +104,8 @@ export function scan(text) {
     }
     return { line: lo + 1, col: off - starts[lo] + 1 };
   };
-  const toks = [...code.matchAll(TOKEN)].map((m) => ({ t: m[0], off: m.index }));
+  // FUNC is the older name for DEF.
+  const toks = [...code.matchAll(TOKEN)].map((m) => ({ t: m[0] === 'FUNC' ? 'DEF' : m[0], off: m.index }));
   const isName = (t) => /^[a-z_][a-z0-9_]*$/.test(t || '');
 
   const funcs = [];
@@ -114,7 +115,7 @@ export function scan(text) {
   const definedAt = new Map();
   const uses = [];
   // Where names live, following .jlb's rules:
-  //   globals   given a value outside any function (or FUNC names), with the first place
+  //   globals   given a value outside any function (or DEF names), with the first place
   //   locals    per function: its inputs, LOCAL names, and names first given a value inside it
   //   blocks    FOR loop variables and FAIL names exist only inside their { } block
   const globals = new Map();
@@ -163,7 +164,7 @@ export function scan(text) {
     for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].kind === 'func') return scopes[i].func;
     return -1;
   };
-  // GLOBAL before a name, FUNC or CONST: the next name made is an outside one.
+  // GLOBAL before a name, DEF or CONST: the next name made is an outside one.
   let globalNext = false;
   // Inside functions: names that become the function's own while an outside one has the
   // same name, and x += 1 on an outside x (an error without GLOBAL).
@@ -220,11 +221,11 @@ export function scan(text) {
       globalNext = true;
       continue;
     }
-    if (t === 'FUNC') {
+    if (t === 'DEF') {
       let j = k + 1;
       let name = null;
       const index = funcs.length;
-      // GLOBAL FUNC name or FUNC GLOBAL name: a function the whole file can use.
+      // GLOBAL DEF name or DEF GLOBAL name: a function the whole file can use.
       const global = globalNext || (toks[j]?.t === 'GLOBAL' && isName(toks[j + 1]?.t));
       if (toks[j]?.t === 'GLOBAL') j++;
       globalNext = false;

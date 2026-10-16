@@ -91,7 +91,7 @@ export default {
 function funcHover(name, params, subtitle, doc) {
   const shared = params.filter((p) => p.startsWith('@'));
   return {
-    title: `FUNC ${name}(${params.join(', ')})`,
+    title: `DEF ${name}(${params.join(', ')})`,
     subtitle,
     body: doc || (shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).'),
   };

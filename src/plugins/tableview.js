@@ -295,11 +295,11 @@ export function parseValue(text, name = 'value') {
       quoted();
       return { name: label, type: 'TEXT', value: s.slice(start, i) };
     }
-    const m = /^(TRUE|FALSE|NULL|TASK (?:[a-z_][a-z0-9_]*|FUNC)|FUNC(?: [a-z_][a-z0-9_]*)?|[A-Z_]+|-?[0-9][0-9a-zA-Z.+-]*)/.exec(s.slice(i));
+    const m = /^(TRUE|FALSE|NULL|TASK (?:[a-z_][a-z0-9_]*|FUNCTION)|FUNCTION(?: [a-z_][a-z0-9_]*)?|[A-Z_]+|-?[0-9][0-9a-zA-Z.+-]*)/.exec(s.slice(i));
     if (!m) fail();
     i += m[0].length;
     const t = m[0];
-    const type = t === 'TRUE' || t === 'FALSE' ? 'BOOL' : t === 'NULL' ? 'NULL' : t.startsWith('TASK ') ? 'TASK' : /^FUNC|^[A-Z_]+$/.test(t) ? 'FUNC' : 'NUMBER';
+    const type = t === 'TRUE' || t === 'FALSE' ? 'BOOL' : t === 'NULL' ? 'NULL' : t.startsWith('TASK ') ? 'TASK' : /^FUNCTION|^[A-Z_]+$/.test(t) ? 'FUNCTION' : 'NUMBER';
     return { name: label, type, value: t };
   };
   try {

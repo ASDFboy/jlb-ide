@@ -365,7 +365,7 @@ test('knows where names exist: functions, FOR blocks, and lines that run later',
   assert.match(p, /total is used before it's given a value \(line 2 gives it one\)/);
   assert.match(p, /inside only exists inside f\(\)/);
   assert.match(p, /i only exists inside its own FOR or FAIL block/);
-  assert.match(p, /sq\(\) is used before its FUNC line has run \(line 13\)/);
+  assert.match(p, /sq\(\) is used before its DEF line has run \(line 13\)/);
   assert.match(p, /count has no value yet/);
   assert.doesNotMatch(p, /Line 5\b/); // inside + total inside the function is fine
 });
@@ -836,7 +836,7 @@ test('follows IMPORT and LOAD: names, missing files, go to definition, hover and
   // Hover and suggestions know the imported functions.
   await page.click('.tab:has-text("main.jlb")');
   const hover = await hoverText(4, 'greet');
-  assert.match(hover, /FUNC greet\(name\)/);
+  assert.match(hover, /DEF greet\(name\)/);
   assert.match(hover, /From helpers\.jlb, line 2/);
   await page.click('.cm-content');
   await page.keyboard.press('Control+End');
@@ -1185,7 +1185,7 @@ test('themes, and changing any color', async () => {
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'night');
   await page.keyboard.press('Control+,');
   await page.fill('.settings-search', 'keywords');
-  const row = page.locator('.color-row:has-text("Keywords (IF, FOR, FUNC)")');
+  const row = page.locator('.color-row:has-text("Keywords (IF, FOR, DEF)")');
   assert.equal(await row.locator('.color-text').inputValue(), '#ff79c6');
   await row.locator('.color-text').fill('#123456');
   await row.locator('.color-text').press('Enter');

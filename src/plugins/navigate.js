@@ -125,7 +125,7 @@ export default {
           // Clicking opens the file it brings in.
           open: doc.path && !missing.has(imp.off) ? resolvePath(doc.path, imp.file) : null,
         })),
-        ...info.funcs.filter((f) => f.name).map((f) => ({ kind: 'FUNC', label: `${f.name}(${f.params.join(', ')})`, line: f.line, col: f.nameCol || f.col })),
+        ...info.funcs.filter((f) => f.name).map((f) => ({ kind: 'DEF', label: `${f.name}(${f.params.join(', ')})`, line: f.line, col: f.nameCol || f.col })),
         ...[...info.points].map(([name, p]) => ({ kind: 'POINT', label: name, line: p.line, col: p.col })),
       ].sort((a, b) => a.line - b.line);
       if (!items.length) {
