@@ -88,7 +88,7 @@ function ownNames(path, info) {
   for (const [name, off] of info.globals) {
     const fn = info.funcs.find((f) => f.name === name && f.inFunc < 0);
     const at = fn ? { line: fn.line, col: fn.nameCol || fn.col } : info.at(off);
-    out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params });
+    out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params, doc: fn?.doc });
   }
   return out;
 }

@@ -62,13 +62,13 @@ export default {
         if (owner) {
           // tool.name, for a table made by LOAD.
           const d = link?.loads.get(owner)?.names?.get(w);
-          return d?.kind === 'func' ? funcHover(w, d.params, `From ${describe(d)}`) : null;
+          return d?.kind === 'func' ? funcHover(w, d.params, `From ${describe(d)}`, d.doc) : null;
         }
         const f = own.funcs.find((x) => x.name === w);
-        if (f) return funcHover(w, f.params, `Defined on line ${f.line}`);
+        if (f) return funcHover(w, f.params, `Defined on line ${f.line}`, f.doc);
         if (own.globals.has(w)) return null;
         const d = link?.names.get(w) || link?.outer.get(w);
-        if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`);
+        if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`, d.doc);
         const load = link?.loads.get(w);
         if (load && (own.loads.has(w) || d?.kind === 'load')) {
           const names = load.names ? [...load.names.values()] : null;
@@ -87,12 +87,13 @@ export default {
   },
 };
 
-function funcHover(name, params, subtitle) {
+/** A function's hover: the comment at the top of its body, or else how its inputs work. */
+function funcHover(name, params, subtitle, doc) {
   const shared = params.filter((p) => p.startsWith('@'));
   return {
     title: `FUNC ${name}(${params.join(', ')})`,
     subtitle,
-    body: shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).',
+    body: doc || (shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).'),
   };
 }
 

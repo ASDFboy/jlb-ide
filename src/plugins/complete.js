@@ -58,7 +58,7 @@ export default {
           for (const d of load.names.values()) {
             fromLoad.add(d.name);
             options.push(d.kind === 'func'
-              ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: `From ${basename(d.path)}`, boost: 2, apply: callApply(d.name) }
+              ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 2, apply: callApply(d.name) }
               : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: `From ${basename(d.path)}`, boost: 2 });
           }
         }
@@ -99,7 +99,7 @@ export default {
         for (const f of info.funcs) {
           if (!f.name || seen.has(f.name)) continue;
           seen.add(f.name);
-          options.push({ label: f.name, type: 'function', detail: `(${f.params.join(', ')})`, boost: 1 });
+          options.push({ label: f.name, type: 'function', detail: `(${f.params.join(', ')})`, info: f.doc || undefined, boost: 1 });
         }
         for (const name of info.defined) {
           if (seen.has(name) || name === typed) continue;
@@ -112,7 +112,7 @@ export default {
           if (seen.has(d.name) || d.name === typed) continue;
           seen.add(d.name);
           options.push(d.kind === 'func'
-            ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: `From ${basename(d.path)}`, boost: 1 }
+            ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 1 }
             : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: `From ${basename(d.path)}`, boost: 1 });
         }
       }
@@ -124,7 +124,7 @@ export default {
       if (owner) {
         const load = peek(api.workspace.active?.path)?.loads.get(owner);
         const d = load?.names?.get(name);
-        if (d?.kind === 'func') return { name: `${owner}.${name}`, params: d.params, desc: null };
+        if (d?.kind === 'func') return { name: `${owner}.${name}`, params: d.params, desc: d.doc || null };
         if (load) return null;
       }
       if (BUILTINS[name]) {
@@ -134,10 +134,10 @@ export default {
       const text = state.doc.toString();
       if (cache.text !== text) cache = { text, info: scan(text) };
       const f = cache.info.funcs.find((x) => x.name === name);
-      if (f) return { name, params: f.params, desc: null };
+      if (f) return { name, params: f.params, desc: f.doc || null };
       const link = peek(api.workspace.active?.path);
       const d = link?.names.get(name) || link?.outer.get(name);
-      return d?.kind === 'func' && !cache.info.globals.has(name) ? { name, params: d.params, desc: null } : null;
+      return d?.kind === 'func' && !cache.info.globals.has(name) ? { name, params: d.params, desc: d.doc || null } : null;
     };
     const hintField = StateField.define({
       create: () => null,

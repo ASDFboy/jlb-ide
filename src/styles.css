@@ -830,7 +830,7 @@ kbd,
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--faint);
-  white-space: normal;
+  white-space: pre-line;
 }
 
 .hover-card {
@@ -855,6 +855,7 @@ kbd,
 .hover-body {
   color: var(--muted);
   margin-top: 4px;
+  white-space: pre-line;
 }
 
 .hover-example {
@@ -910,6 +911,7 @@ kbd,
   max-width: 320px;
   font-family: 'Atkinson Hyperlegible', sans-serif !important;
   color: var(--muted);
+  white-space: pre-line;
 }
 
 .cm-diagnostic {

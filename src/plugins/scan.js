@@ -44,6 +44,31 @@ export function strip(text) {
   return { noComments, code };
 }
 
+/**
+ * The comment that starts at `i` (after any spaces and new lines), as plain text: a
+ * >>> ... <<< comment, or >> lines one after another. null if there isn't one.
+ */
+export function commentAt(text, i) {
+  while (i < text.length && /\s/.test(text[i])) i++;
+  let lines;
+  if (text.startsWith('>>>', i)) {
+    const end = text.indexOf('<<<', i + 3);
+    if (end < 0) return null;
+    lines = text.slice(i + 3, end).split('\n');
+  } else if (text.startsWith('>>', i)) {
+    lines = [];
+    for (const ln of text.slice(i).split('\n')) {
+      const t = ln.trim();
+      if (!t.startsWith('>>') || t.startsWith('>>>')) break;
+      lines.push(t.slice(2));
+    }
+  } else return null;
+  lines = lines.map((l) => l.trim());
+  while (lines.length && !lines[0]) lines.shift();
+  while (lines.length && !lines.at(-1)) lines.pop();
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n') || null;
+}
+
 /** The name LOAD gives a file's table: "My-Tools.jlb" → my_tools. */
 export function loadName(file) {
   // Like the interpreter: the file name without its extension, lowercase, - and space as _.
@@ -216,6 +241,8 @@ export function scan(text) {
           }
         }
       }
+      // A comment as the first thing inside the function describes it.
+      if (toks[j + 1]?.t === '{') fn.doc = commentAt(text, toks[j + 1].off + 1);
       pending = { kind: 'func', names, func: index, id: ++scopeIds };
       k = j;
       continue;
