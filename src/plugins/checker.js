@@ -18,6 +18,7 @@ export default {
     { key: 'undefined', title: 'Warn about names that are never given a value', description: 'Catches typos like PRINT(scroe). Names from files brought in with IMPORT and LOAD count too.', type: 'boolean', default: true },
     { key: 'imports', title: 'Warn when IMPORT or LOAD can\'t find its file', description: 'Also catches tool.nmae typos for tables made by LOAD.', type: 'boolean', default: true },
     { key: 'gotoPoint', title: 'Warn about GOTO with no matching POINT', type: 'boolean', default: true },
+    { key: 'scope', title: 'Point out names a function makes its own', description: 'Inside a function, a name given a value is the function\'s own unless GLOBAL comes first. This notes when an outside name has the same name, and warns when x += 1 tries to change an outside x.', type: 'boolean', default: true },
     { key: 'constants', title: 'Warn when a constant (CONST) is changed', description: 'Changing a constant, or the tables inside it, is an error when the program runs.', type: 'boolean', default: true },
   ],
   activate(api) {
@@ -69,7 +70,7 @@ export default {
         out.push(...interpreterLine(text));
         const wantNames = api.settings.get('undefined');
         const wantImports = api.settings.get('imports');
-        if (!wantNames && !wantImports) return out;
+        if (!wantNames && !wantImports && !api.settings.get('scope')) return out;
         // Files brought in are found next to this one, so an unsaved new file can't follow them.
         const link = path ? await linked(api, path, text, info) : null;
         if (wantImports) out.push(...importProblems(info, link));
@@ -78,6 +79,7 @@ export default {
         const followed = imports === (info.codeLines.join('\n').match(/\bIMPORT\b/g) || []).length;
         const canFollow = imports === 0 || (link && followed && !link.missing.some((m) => m.kind === 'IMPORT'));
         if (wantNames && canFollow) out.push(...undefinedNames(info, link));
+        if (api.settings.get('scope') && canFollow) out.push(...functionScope(info, link));
         return out;
       },
     });
@@ -257,7 +259,7 @@ function undefinedNames({ uses, defined, globals: own, funcs, loads, gotos, poin
       seen.add(key);
       const at = lineAt(globals.get(u.name));
       const fromImport = imported.has(u.name) && globals.get(u.name) === imported.get(u.name).importOff;
-      const isFunc = fromImport ? imported.get(u.name).kind === 'func' : funcs.some((f) => f.name === u.name && f.inFunc < 0);
+      const isFunc = fromImport ? imported.get(u.name).kind === 'func' : funcs.some((f) => f.name === u.name && (f.inFunc < 0 || f.global));
       out.push({
         line: u.line, col: u.col, endCol: u.col + u.name.length, severity: 'warning',
         message: fromImport
@@ -269,6 +271,35 @@ function undefinedNames({ uses, defined, globals: own, funcs, loads, gotos, poin
               : `${u.name} is used before it's given a value (line ${at} gives it one).`,
       });
     }
+  }
+  return out;
+}
+
+// Inside a function, a name given a value is its own unless GLOBAL comes first: note
+// when that hides an outside name, and warn about x += 1 on an outside x (an error).
+function functionScope({ shadows, outsideChanges, globals, loads, funcs, at }, link) {
+  const out = [];
+  const outside = (n) => globals.has(n) || loads.has(n) || link?.names.has(n) || link?.outer.has(n);
+  const fname = (f) => (funcs[f].name ? `${funcs[f].name}()` : 'this function');
+  const span = (n, off) => {
+    const p = at(off);
+    return { line: p.line, col: p.col, endCol: p.col + n.length };
+  };
+  for (const c of outsideChanges) {
+    if (!outside(c.name)) continue;
+    out.push({
+      ...span(c.name, c.off), severity: 'warning',
+      message: `${c.name} isn't one of ${fname(c.func)}'s own variables, so ${c.name} ${c.op} can't change it. To change the outside ${c.name}, write GLOBAL ${c.name} ${c.op} ...`,
+      fix: { label: `Change to GLOBAL ${c.name}`, text: `GLOBAL ${c.name}` },
+    });
+  }
+  for (const s of shadows) {
+    if (!outside(s.name)) continue;
+    out.push({
+      ...span(s.name, s.off), severity: 'info',
+      message: `This ${s.name} is ${fname(s.func)}'s own, separate from the outside ${s.name}. To change the outside one, write GLOBAL ${s.name}; to keep it separate on purpose, LOCAL ${s.name} says so.`,
+      fix: { label: `Change to GLOBAL ${s.name}`, text: `GLOBAL ${s.name}` },
+    });
   }
   return out;
 }

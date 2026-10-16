@@ -4,8 +4,9 @@
 //   addCompletions(source)  suggestions while typing
 //   addCheck(rule)          mistakes shown as squiggles and in the Problems panel
 
-import { hoverTooltip } from '@codemirror/view';
-import { autocompletion } from '@codemirror/autocomplete';
+import { hoverTooltip, keymap } from '@codemirror/view';
+import { Prec } from '@codemirror/state';
+import { autocompletion, acceptCompletion, startCompletion, closeCompletion, moveCompletionSelection } from '@codemirror/autocomplete';
 import { linter, forceLinting } from '@codemirror/lint';
 import { h, clear, icon } from './ui.js';
 import { OPERATORS } from '../lang/data.js';
@@ -32,6 +33,7 @@ export class Language {
     window.addEventListener('keyup', track, true);
     s.define({ key: 'editor.hoverDelay', title: 'Hover delay', description: 'Milliseconds before hover info appears.', type: 'number', default: 350, min: 0, max: 3000, section: 'Editor' });
     s.define({ key: 'editor.suggest', title: 'Suggest words while typing', description: 'Ctrl+Space shows suggestions even when this is off.', type: 'boolean', default: true, section: 'Editor' });
+    s.define({ key: 'editor.acceptKey', title: 'Accept a suggestion with', description: 'With Tab, Enter always starts a new line. When no suggestion is showing, Tab indents.', type: 'select', default: 'tab', options: [{ value: 'tab', label: 'Tab' }, { value: 'enter', label: 'Enter' }, { value: 'both', label: 'Tab or Enter' }], section: 'Editor' });
     s.define({ key: 'editor.problemsAllFiles', title: 'List problems from every open file', description: 'Off lists only the file you are looking at.', type: 'boolean', default: true, section: 'Editor' });
     s.define({ key: 'editor.checkDelay', title: 'Checking delay', description: 'Milliseconds after you stop typing before code is checked for mistakes.', type: 'number', default: 400, min: 0, max: 5000, section: 'Editor' });
 
@@ -40,6 +42,7 @@ export class Language {
     s.onChange('editor.hover', () => this.rebuild());
     s.onChange('editor.hoverDelay', () => this.rebuild());
     s.onChange('editor.suggest', () => this.rebuild());
+    s.onChange('editor.acceptKey', () => this.rebuild());
     s.onChange('editor.checkDelay', () => this.rebuild());
     let shown = null;
     ide.events.on('active-change', (doc) => {
@@ -74,7 +77,21 @@ export class Language {
         activateOnTyping: s.get('editor.suggest'),
         icons: false,
         closeOnBlur: true,
+        defaultKeymap: false,
       }));
+      // The suggestion keys: Tab (or Enter, as set) accepts, so the other one works as usual.
+      const accept = s.get('editor.acceptKey');
+      const keys = [
+        { key: 'Ctrl-Space', run: startCompletion },
+        { key: 'Escape', run: closeCompletion },
+        { key: 'ArrowDown', run: moveCompletionSelection(true) },
+        { key: 'ArrowUp', run: moveCompletionSelection(false) },
+        { key: 'PageDown', run: moveCompletionSelection(true, 'page') },
+        { key: 'PageUp', run: moveCompletionSelection(false, 'page') },
+      ];
+      if (accept !== 'enter') keys.push({ key: 'Tab', run: acceptCompletion });
+      if (accept !== 'tab') keys.push({ key: 'Enter', run: acceptCompletion });
+      exts.push(Prec.highest(keymap.of(keys)));
       if (this.checks.length) exts.push(linter((view) => this.check(view), { delay: s.get('editor.checkDelay') }));
       else {
         this.byDoc.clear();

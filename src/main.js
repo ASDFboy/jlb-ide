@@ -17,7 +17,8 @@ import { Workspace } from './core/workspace.js';
 import { Language } from './core/language.js';
 import { Runner } from './core/runner.js';
 import { Plugins } from './core/plugins.js';
-import { openSettings, defineAppearance } from './core/settings-view.js';
+import { openSettings, defineAppearance, currentTheme } from './core/settings-view.js';
+import { THEMES } from './core/themes.js';
 import { h, choose } from './core/ui.js';
 
 import checker from './plugins/checker.js';
@@ -105,10 +106,7 @@ function registerCommands(ide) {
   add('view.explorer', 'Show files', () => lay.showView('explorer'), 'Ctrl+Shift+E', 'View');
   add('view.output', 'Show output', () => lay.showPanel('output'), 'Ctrl+Shift+U', 'View');
   add('view.problems', 'Show problems', () => lay.showPanel('problems'), 'Ctrl+Shift+M', 'View');
-  add('view.theme', 'Switch between night and day themes', () => {
-    const now = document.documentElement.dataset.theme;
-    s.set('ui.theme', now === 'night' ? 'day' : 'night');
-  }, null, 'View');
+  add('view.theme', 'Switch between night and day themes', () => s.set('ui.theme', THEMES[currentTheme(s)].dark ? 'day' : 'night'), null, 'View');
   add('run.start', 'Run the current file', () => ide.runner.run(), 'F5', 'Run');
   add('run.stop', 'Stop the running program', () => ide.runner.stop(), 'Shift+F5', 'Run');
   add('run.rust', 'Run with the Rust interpreter', () => s.set('run.interpreter', 'rust'), null, 'Run');

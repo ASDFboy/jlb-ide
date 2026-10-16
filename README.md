@@ -19,6 +19,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
   - A name used where it doesn't exist: one that's only given a value inside another function, or a `FOR` or `FAIL` name used after its block.
   - A variable or function used above the line that gives it a value (top-level code runs in order).
   - A `GOTO` with no matching `POINT`.
+  - `x += 1` in a function changing an outside `x` without `GLOBAL` (an error), and, as a note, a name a function makes its own while an outside name is called the same (one click adds `GLOBAL`).
   - Changing a constant (`CONST`), or the tables inside it, and a `CONST` for a name that already has a value.
   - A first-line `>> @interpreter` that names no interpreter, or one that isn't on the first line.
   - An `IMPORT` or `LOAD` whose file isn't there, and `tools.nmae` when the file `LOAD` brought in has no `nmae`.
@@ -49,7 +50,7 @@ A code editor made for the [.jlb programming language](https://github.com/ASDFbo
 
 ### Everyday editing
 
-Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, brackets colored by depth (with a stray closing bracket marked red), folding of blocks, multi-line tables and `>>>` comments (the arrows next to the line numbers, with "⋯ 6 lines" in place of what's folded), suggestions while typing (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions, `POINT`s and the files brought in, find and replace, a command palette, a Monokai color theme (night and day versions), your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
+Files and folders (drag to move them, arrow keys to get around), tabs you can drag into order, error lines in the output that jump to the code, syntax highlighting, brackets colored by depth (with a stray closing bracket marked red), folding of blocks, multi-line tables and `>>>` comments (the arrows next to the line numbers, with "⋯ 6 lines" in place of what's folded), suggestions while typing, accepted with Tab (or Enter, in Settings) (commands, your own names, a table's entries after `hero.`, and ready-made `IF`, `FOR`, `FUNC` and `TRY` blocks), a hint showing which input you're typing in a command or function call, go to definition (F12 or Ctrl+click), an Outline of functions, `POINT`s and the files brought in, find and replace, a command palette, ten color themes (Monokai Night and Day, Dracula, One Dark, Nord, Gruvbox, Solarized Dark and Light, GitHub Light and High Contrast), with every color of the interface and the code changeable in Settings → Colors, your folder and files reopened where you left them, and backups of unsaved work: if the IDE or the computer crashes, your unsaved tabs come back the next time you open it (and there's a setting to close without being asked about unsaved changes, keeping them for next time).
 
 ### Settings for everything
 
@@ -118,6 +119,7 @@ In **Settings → Files**, **Edit .jlb files with JLB IDE** adds **Edit with JLB
 | Ctrl+Alt+[, Ctrl+Alt+] | fold everything, unfold everything |
 | Ctrl+/ | comment or uncomment lines with `>>` |
 | Ctrl+Space | show suggestions |
+| Tab | accept a suggestion (Enter starts a new line; changeable in Settings) |
 | Ctrl+F1 | the language guide |
 | Ctrl+B, Ctrl+J | show or hide the sidebar, the bottom panel |
 

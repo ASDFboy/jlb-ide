@@ -30,7 +30,9 @@
   --tint-yellow: rgba(230, 219, 116, 0.16);
   --tint-yellow-strong: rgba(230, 219, 116, 0.28);
   --tint-rose: rgba(249, 38, 114, 0.14);
-  --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --accent-ink: #272822;
+  --run-glow: rgba(166, 226, 46, 0.18);
+  --shadow-color: rgba(0, 0, 0, 0.5);
   --backdrop: rgba(10, 10, 8, 0.5);
 
   --syn-keyword: #f92672;
@@ -80,7 +82,9 @@
   --tint-yellow: rgba(196, 180, 40, 0.2);
   --tint-yellow-strong: rgba(196, 180, 40, 0.34);
   --tint-rose: rgba(200, 18, 90, 0.1);
-  --shadow: 0 18px 50px rgba(39, 40, 34, 0.18);
+  --accent-ink: #ffffff;
+  --run-glow: rgba(166, 226, 46, 0.18);
+  --shadow-color: rgba(39, 40, 34, 0.18);
   --backdrop: rgba(39, 40, 34, 0.22);
 
   --syn-keyword: #c8125a;
@@ -102,6 +106,10 @@
   --bracket-1: #9b30c2;
   --bracket-2: #1a66c9;
   --bracket-3: #a0522d;
+}
+
+:root {
+  --shadow: 0 18px 50px var(--shadow-color);
 }
 
 * {
@@ -449,7 +457,7 @@ kbd,
   background: var(--run);
   color: var(--run-ink);
   font-weight: 700;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 2px 10px rgba(166, 226, 46, 0.18);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 2px 10px var(--run-glow);
 }
 
 .run-btn:hover {
@@ -1041,12 +1049,8 @@ kbd,
 .btn.primary {
   background: var(--sky);
   border-color: var(--sky);
-  color: var(--bg);
+  color: var(--accent-ink);
   font-weight: 700;
-}
-
-:root[data-theme='day'] .btn.primary {
-  color: #fff;
 }
 
 .btn.primary:hover {
@@ -1153,11 +1157,7 @@ textarea.input {
 
 .switch input:checked + .switch-track::after {
   transform: translateX(14px);
-  background: var(--bg);
-}
-
-:root[data-theme='day'] .switch input:checked + .switch-track::after {
-  background: #fff;
+  background: var(--accent-ink);
 }
 
 .switch input:focus-visible + .switch-track {
@@ -3558,4 +3558,35 @@ tr:hover .view-table,
   .fold-hover .cm-foldGutter .fold-marker.open {
     transition: none;
   }
+}
+
+.color-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-pick {
+  width: 34px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  cursor: pointer;
+}
+
+.color-pick::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-pick::-webkit-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}
+
+.input.color-text {
+  width: 190px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
 }

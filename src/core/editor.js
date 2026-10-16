@@ -8,7 +8,7 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { indentOnInput, bracketMatching, indentUnit } from '@codemirror/language';
-import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { lintKeymap } from '@codemirror/lint';
 import { jlb, jlbHighlight } from '../lang/jlb.js';
@@ -98,7 +98,7 @@ export class Editor {
         jlb(),
         jlbHighlight,
         baseTheme,
-        keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, ...completionKeymap, ...lintKeymap, indentWithTab]),
+        keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, ...lintKeymap, indentWithTab]),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) this.ide.events.emit('editor-change', u);
           if (u.selectionSet || u.docChanged) this.ide.events.emit('editor-cursor', u.state);

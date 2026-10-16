@@ -5,20 +5,31 @@ import { h, clear, icon } from './ui.js';
 import { invoke, pickOpen } from './backend.js';
 import { keyOf, showKey } from './commands.js';
 import { join } from './paths.js';
+import { THEMES, COLOR_GROUPS, COLOR_VARS, themeColors, parseColor, toHex, withAlphaOf } from './themes.js';
 
 const ORDER = ['Appearance', 'Editor', 'Files', 'Running', 'Interpreters', 'Features'];
 
+let closeOpen = null;
+
 export function openSettings(ide, focusSection) {
-  document.querySelector('.settings-back')?.remove();
+  closeOpen?.();
   const s = ide.settings;
   const search = h('input.settings-search', { type: 'search', placeholder: 'Search settings', spellcheck: false, 'aria-label': 'Search settings' });
   const nav = h('nav.settings-nav', { 'aria-label': 'Sections' });
   const body = h('div.settings-body');
   const close = () => {
+    closeOpen = null;
     back.remove();
     off.forEach((f) => f());
+    document.removeEventListener('keydown', onKey);
     ide.editor.focus();
   };
+  // Escape closes Settings wherever the focus is (a rebuilt row can leave it on the page).
+  const onKey = (e) => {
+    if (e.key === 'Escape' && !e.target.classList?.contains('key-input') && !document.querySelector('.dialog')) close();
+  };
+  document.addEventListener('keydown', onKey);
+  closeOpen = close;
   const sheet = h('div.settings-sheet', { role: 'dialog', 'aria-label': 'Settings' },
     h('div.settings-head',
       h('h2', 'Settings'),
@@ -27,9 +38,6 @@ export function openSettings(ide, focusSection) {
     h('div.settings-main', nav, body));
   const back = h('div.settings-back', sheet);
   back.addEventListener('mousedown', (e) => e.target === back && close());
-  sheet.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !e.target.classList.contains('key-input')) close();
-  });
 
   const sections = () => {
     const map = new Map();
@@ -54,6 +62,7 @@ export function openSettings(ide, focusSection) {
     clear(nav);
     clear(body);
     const all = sections();
+    all.splice(all.findIndex(([n]) => n === 'Appearance') + 1, 0, ['Colors', null]);
     all.push(['Keyboard shortcuts', null]);
     for (const [name, defs] of all) {
       const id = 'set-' + name.toLowerCase().replace(/\W+/g, '-');
@@ -61,7 +70,7 @@ export function openSettings(ide, focusSection) {
       if (defs) {
         rows = defs.filter((d) => !q || `${d.title} ${d.description || ''} ${name}`.toLowerCase().includes(q)).map((d) => row(d));
       } else {
-        rows = keyRows(q);
+        rows = name === 'Colors' ? colorRows(q) : keyRows(q);
       }
       if (!rows.length) continue;
       nav.append(h('button.settings-nav-btn', { on: { click: () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }, name));
@@ -105,6 +114,69 @@ export function openSettings(ide, focusSection) {
         d.description ? h('div.setting-desc', d.description) : null,
         changed ? h('button.link.setting-reset', { on: { click: () => s.reset(d.key) } }, 'Reset to default') : null),
       h('div.setting-control', control));
+  };
+
+  /** Every color of the theme in use, each one changeable (kept per theme). */
+  const colorRows = (q) => {
+    const id = currentTheme(s);
+    const key = 'colors.' + id;
+    const own = s.get(key) || {};
+    const root = document.documentElement;
+    // The theme's own colors: worked out in themes.js, or (Night and Day) read from the
+    // stylesheet with the changed colors left out for a moment.
+    let base = themeColors(id);
+    if (!base) {
+      const style = document.getElementById('theme-colors');
+      const text = style?.textContent;
+      if (style) style.textContent = '';
+      const cs = getComputedStyle(root);
+      base = Object.fromEntries(COLOR_VARS.map((v) => [v, cs.getPropertyValue(v).trim()]));
+      if (style) style.textContent = text;
+    }
+    const themeValue = (v) => base[v];
+    const save = (v, value) => {
+      const next = { ...(s.get(key) || {}) };
+      if (value == null) delete next[v];
+      else next[v] = value;
+      root.style.removeProperty(v);
+      if (Object.keys(next).length) s.set(key, next);
+      else s.reset(key);
+    };
+    const rows = [];
+    const any = Object.keys(own).length;
+    if (!q || 'colors theme reset'.includes(q)) {
+      rows.push(h('div.setting',
+        h('div.setting-text', h('div.setting-title', `Colors of ${THEMES[id].label}`),
+          h('div.setting-desc', 'Change any color below; it changes right away and is kept for this theme. Pick another theme under Appearance.')),
+        h('div.setting-control', any ? h('button.btn', { on: { click: () => s.reset(key) } }, 'Reset all colors') : null)));
+    }
+    for (const [group, list] of COLOR_GROUPS) {
+      for (const [v, label] of list) {
+        if (q && !`${label} ${group} color colour ${v}`.toLowerCase().includes(q)) continue;
+        const value = own[v] ?? themeValue(v);
+        const text = h('input.input.color-text', {
+          value, spellcheck: false, 'aria-label': `${label}, as text`,
+          on: { change: (e) => (parseColor(e.target.value) ? save(v, e.target.value.trim()) : (e.target.value = value)) },
+        });
+        const pick = h('input.color-pick', {
+          type: 'color', value: toHex(value), 'aria-label': label,
+          on: {
+            // Shown while choosing; kept when the picker closes.
+            input: (e) => {
+              const c = withAlphaOf(e.target.value, value);
+              root.style.setProperty(v, c);
+              text.value = c;
+            },
+            change: (e) => save(v, withAlphaOf(e.target.value, value)),
+          },
+        });
+        rows.push(h(`div.setting.color-row${own[v] ? '.changed' : ''}`,
+          h('div.setting-text', h('div.setting-title', label), h('div.setting-desc', group),
+            own[v] ? h('button.link.setting-reset', { on: { click: () => save(v, null) } }, 'Reset to the theme\'s color') : null),
+          h('div.setting-control.color-control', pick, text)));
+      }
+    }
+    return rows;
   };
 
   const keyRows = (q) => {
@@ -160,17 +232,34 @@ export function openSettings(ide, focusSection) {
 
 export function defineAppearance(ide) {
   const s = ide.settings;
-  s.define({ key: 'ui.theme', title: 'Theme', type: 'select', default: 'system', options: [{ value: 'system', label: 'Match my computer' }, { value: 'night', label: 'Night (dark)' }, { value: 'day', label: 'Day (light)' }], section: 'Appearance' });
+  s.define({
+    key: 'ui.theme', title: 'Theme', description: 'Every color can also be changed, under Colors.', type: 'select', default: 'system', section: 'Appearance',
+    options: [{ value: 'system', label: 'Match my computer (Monokai Night or Day)' }, ...Object.entries(THEMES).map(([value, t]) => ({ value, label: `${t.label} (${t.dark ? 'dark' : 'light'})` }))],
+  });
   s.define({ key: 'ui.fontSize', title: 'Interface text size', description: 'The size of menus, panels and buttons. The code size is under Editor.', type: 'number', default: 13, min: 10, max: 22, section: 'Appearance' });
   s.define({ key: 'ui.reduceMotion', title: 'Reduce motion', description: 'Turns off animations.', type: 'boolean', default: false, section: 'Appearance' });
   const media = matchMedia('(prefers-color-scheme: light)');
+  const style = h('style#theme-colors');
+  document.head.append(style);
   const apply = () => {
-    const t = s.get('ui.theme');
-    document.documentElement.dataset.theme = t === 'system' ? (media.matches ? 'day' : 'night') : t;
+    const id = currentTheme(s);
+    document.documentElement.dataset.theme = THEMES[id].dark ? 'night' : 'day';
+    // The theme's colors with any changed ones on top, in one rule (cheap to swap).
+    const colors = { ...themeColors(id), ...(s.get('colors.' + id) || {}) };
+    const css = Object.entries(colors).filter(([k, v]) => /^--[\w-]+$/.test(k) && parseColor(v)).map(([k, v]) => `${k}:${v};`).join('');
+    if (style.textContent !== css) style.textContent = css ? `:root:root{${css}}` : '';
     document.documentElement.style.setProperty('--ui-size', s.get('ui.fontSize') + 'px');
     document.documentElement.classList.toggle('reduce-motion', !!s.get('ui.reduceMotion'));
   };
   media.addEventListener('change', apply);
   s.onChange('ui.', apply);
+  s.onChange('colors.', apply);
   apply();
+}
+
+/** The theme in use: the chosen one, or Night or Day to match the computer. */
+export function currentTheme(s) {
+  const t = s.get('ui.theme');
+  if (THEMES[t]) return t;
+  return matchMedia('(prefers-color-scheme: light)').matches ? 'day' : 'night';
 }
