@@ -265,7 +265,7 @@ function undefinedNames({ uses, defined, globals: own, funcs, loads, gotos, poin
         message: fromImport
           ? `${u.name}${isFunc ? '()' : ''} comes from the IMPORT on line ${at}, which hasn't run yet here. Move the IMPORT above this line.`
           : isFunc
-            ? `${u.name}() is used before its FUNC line has run (line ${at}). Move the FUNC above this line.`
+            ? `${u.name}() is used before its DEF line has run (line ${at}). Move the DEF above this line.`
             : globals.get(u.name) === u.off
               ? `${u.name} has no value yet, so it can't be changed here. Give it a starting value first, like ${u.name} = 0.`
               : `${u.name} is used before it's given a value (line ${at} gives it one).`,

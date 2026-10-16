@@ -14,7 +14,7 @@ const SNIPPETS = [
   ['FOR', 'FOR ${i} IN ${1} TO ${10} {\n\t${}\n}', 'counting loop'],
   ['WHILE', 'WHILE ${condition} {\n\t${}\n}', 'WHILE loop'],
   ['REPEAT', 'REPEAT ${3} {\n\t${}\n}', 'repeat a set number of times'],
-  ['FUNC', 'FUNC ${name}(${inputs}) {\n\t${}\n}', 'function'],
+  ['DEF', 'DEF ${name}(${inputs}) {\n\t${}\n}', 'function'],
   ['TRY', 'TRY {\n\t${}\n} FAIL ${err} {\n\tPRINT(err.message)\n}', 'catch errors'],
 ];
 
@@ -24,7 +24,7 @@ export default {
   description: 'Suggests commands (with their inputs), keywords and your own names as you type, plus ready-made blocks like IF and FOR.',
   builtin: true,
   settings: [
-    { key: 'snippets', title: 'Suggest ready-made blocks (IF, FOR, FUNC, ...)', type: 'boolean', default: true },
+    { key: 'snippets', title: 'Suggest ready-made blocks (IF, FOR, DEF, ...)', type: 'boolean', default: true },
     { key: 'names', title: 'Suggest names from the current file', type: 'boolean', default: true },
     { key: 'fields', title: 'Suggest table entries after a dot', description: 'After hero. it suggests the entries hero is given in this file, like hero.hp.', type: 'boolean', default: true },
     { key: 'inputHints', title: 'Show a command\'s inputs while typing them', description: 'Inside PRINT( ... ) or your own functions, shows what goes in each spot, with the current one highlighted.', type: 'boolean', default: true },
@@ -222,8 +222,8 @@ function hintAt(state, signature) {
       const called = text.slice(0, i).match(/(?:(?<![\w.])([a-z_][a-z0-9_]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*$/);
       const name = called?.[2];
       const owner = called?.[1];
-      if (!name || /^(IF|ELIF|ELSEIF|WHILE|FOR|REPEAT|RETURN|FUNC)$/.test(name)) return null;
-      if (/\bFUNC\s+$/.test(text.slice(0, i - name.length))) return null; // defining, not calling
+      if (!name || /^(IF|ELIF|ELSEIF|WHILE|FOR|REPEAT|RETURN|DEF|FUNC)$/.test(name)) return null;
+      if (/\b(DEF|FUNC)(\s+GLOBAL)?\s+$/.test(text.slice(0, i - name.length))) return null; // defining, not calling
       const sig = signature(name, state, owner);
       if (!sig || !sig.params.length) return null;
       return {

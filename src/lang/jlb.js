@@ -104,13 +104,13 @@ export const jlbStream = {
       if (upper && !lower) {
         if (w === 'TRUE' || w === 'FALSE') return 'bool';
         if (w === 'NULL') return 'null';
-        state.prev = w === 'GLOBAL' && prev === 'FUNC' ? 'FUNC' : w;
+        state.prev = w === 'FUNC' ? 'DEF' : w === 'GLOBAL' && prev === 'DEF' ? 'DEF' : w;
         if (KW.has(w)) return 'keyword';
         if (COMMANDS.has(w)) return 'variableName.standard';
         return 'invalid';
       }
       if (upper) return 'invalid'; // mixed case: names are lowercase, commands ALL CAPS
-      if (prev === 'FUNC') return 'variableName.function.definition';
+      if (prev === 'DEF') return 'variableName.function.definition';
       if (prev === 'POINT' || prev === 'GOTO') return 'labelName';
       if (prev === '.') return 'propertyName';
       if (prev === 'LOCAL' || prev === 'CONST' || prev === 'GLOBAL' || prev === 'FOR' || prev === 'FAIL') return 'variableName.definition';

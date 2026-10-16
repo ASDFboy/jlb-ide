@@ -110,7 +110,7 @@ function spaced(a, b, beforeA) {
   if (a.type === 'modifier') return false; // @hero, ...rest
   // Unary: -x and !x after something that isn't a value.
   if (isOp(a) && (x === '-' || x === '+' || x === '!') && !(beforeA && isValue(beforeA))) return false;
-  if (y === '(') return !(isName(a) || x === 'FUNC' || x === ')' || x === ']' || a.type === 'variableName.standard');
+  if (y === '(') return !(isName(a) || x === 'DEF' || x === 'FUNC' || x === ')' || x === ']' || a.type === 'variableName.standard');
   if (y === '[') return !(isName(a) || x === ')' || x === ']' || a.type === 'string');
   if (isOp(a) || isOp(b)) return true;
   if (b.type === 'modifier') return true;
@@ -122,7 +122,7 @@ export function format(text, { indent = 4, blankLines = 2, lines: only = null } 
   const lines = tokenize(text);
   const unit = ' '.repeat(indent);
   // Open brackets, with the line each was opened on. Brackets opened on the same
-  // line add one level together, so PRINT(run(FUNC() { indents its body once.
+  // line add one level together, so PRINT(run(DEF() { indents its body once.
   const stack = [];
   let continues = false; // the line before ended with an operator, so this one carries on
   const out = [];

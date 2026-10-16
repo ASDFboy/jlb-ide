@@ -4,7 +4,7 @@
 
 export const KEYWORDS = [
   'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
-  'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
+  'DEF', 'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
   'CONST', 'START', 'GLOBAL',
 ];
 
@@ -22,7 +22,7 @@ export const BUILTINS = {
   STR: ['STR(x)', 'The value as text, written the way PRINT shows it.'],
   ENG: ['ENG(n)', 'Engineering notation: ENG(1500) is "1.5e3".'],
   HEX: ['HEX(n)', 'Hex text for a whole number: HEX(255) is "0xFF".'],
-  TYPE: ['TYPE(x)', '"NUMBER", "TEXT", "BOOL", "NULL", "TABLE", "FUNC" or "TASK".'],
+  TYPE: ['TYPE(x)', '"NUMBER", "TEXT", "BOOL", "NULL", "TABLE", "FUNCTION" or "TASK".'],
   LEN: ['LEN(x)', 'Numbered items in a table, characters in text, or characters in a number written out (LEN(-2.5) is 4).'],
   ERROR: ['ERROR(message)', 'Raises an error with your message. TRY ... FAIL can catch it.'],
   INSERT: ['INSERT(t, value, pos)', 'Puts value so it ends up at pos (negative counts from the end). Changes t, and also gives back the result. Works on text too.'],
@@ -81,10 +81,11 @@ export const KEYWORD_HELP = {
   STEP: 'How big each jump is. It can be a decimal; STEP 0 is an error.',
   BREAK: 'Leaves the loop.',
   SKIP: 'Jumps straight to the next round of the loop.',
-  FUNC: 'Makes a function. Inputs are copies unless marked with @; inputs can have defaults (n = 10), and ...rest collects extras into a table.',
+  FUNC: 'The older name for DEF, and works the same way.',
+  DEF: 'Makes a function. Inputs are copies unless marked with @; inputs can have defaults (n = 10), and ...rest collects extras into a table.',
   RETURN: 'Leaves the function and gives back a value. Without RETURN a function gives back NULL.',
   LOCAL: 'A variable that belongs only to this function. Names given a value in a function already are its own, so LOCAL is for making one before it has a value (LOCAL x starts as NULL), or saying so clearly. Only allowed inside functions.',
-  GLOBAL: 'Inside a function, names given a value are its own. GLOBAL before the name gives the value to the file\'s outside name instead: GLOBAL score += 1, GLOBAL FUNC helper() { }, GLOBAL CONST max = 10. Outside names can always be read, and their table entries changed, without it.',
+  GLOBAL: 'Inside a function, names given a value are its own. GLOBAL before the name gives the value to the file\'s outside name instead: GLOBAL score += 1, GLOBAL DEF helper() { }, GLOBAL CONST max = 10. Outside names can always be read, and their table entries changed, without it.',
   TRY: 'Runs a block; if an error happens, the FAIL block runs instead of crashing.',
   FAIL: 'FAIL err { } runs when the TRY block errors. err.message, err.line and err.file tell you what happened.',
   GOTO: 'Jumps to a POINT in the same function or file, forward or backward. It can jump out of blocks but not into them.',
@@ -133,7 +134,7 @@ export const OPERATORS = {
   '!': ['NOT', 'Flips TRUE and FALSE, using the truth rules.'],
   '=': ['Assign (copy)', 'Copies the value. Tables are fully copied (cheaply, copy-on-write), so changing the copy never changes the original. Use @= to share instead. Writing = inside a condition is an error; use ==.'],
   '@=': ['Assign (share)', 'Both names point at the same table or text, so a change through one shows in the other. For numbers, TRUE/FALSE and NULL it acts like =.'],
-  '@': ['Share', 'In FUNC f(@p) or FOR @x IN t, works on the real value instead of a copy.'],
+  '@': ['Share', 'In DEF f(@p) or FOR @x IN t, works on the real value instead of a copy.'],
   '+=': ['Add to', 'x += v is x = x + v, with the same rules: joins text, adds to tables.'],
   '-=': ['Subtract from', 'x -= v is x = x - v.'],
   '*=': ['Multiply by', 'x *= v is x = x * v.'],
@@ -142,7 +143,7 @@ export const OPERATORS = {
   '!^=': ['Root of', 'x !^= v is x = x !^ v.'],
   '%=': ['Remainder of', 'x %= v is x = x % v.'],
   '!%=': ['Long-division answer of', 'x !%= v is x = x !% v.'],
-  '...': ['Rest of the inputs', 'FUNC total(...nums) collects every extra input into a table.'],
+  '...': ['Rest of the inputs', 'DEF total(...nums) collects every extra input into a table.'],
   '>>': ['Comment', '>> starts a comment to the end of the line. >>> starts a comment that runs until <<<.'],
 };
 
