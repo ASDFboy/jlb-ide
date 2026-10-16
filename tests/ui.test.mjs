@@ -1151,6 +1151,24 @@ test('the first line chooses the interpreter; CONST and tasks', async () => {
   await page.evaluate(() => window.jlbIde.workspace.save());
 });
 
+test('a comment at the top of a function is its hover text', async () => {
+  const helper = path.join(proj, 'geo.jlb');
+  fs.writeFileSync(helper, 'FUNC dist(a, b) {\n    >>> How far apart\n        two points are. <<<\n    RETURN ABS(a - b)\n}\n');
+  const file = path.join(proj, 'docs_test.jlb');
+  fs.writeFileSync(file, 'IMPORT "geo.jlb"\nFUNC point_at(x, y, angle, distance) {\n    >> Where you end up going `distance`\n    >> from (x, y) at `angle` degrees.\n    RETURN [x + COS(angle) * distance, y + SIN(angle) * distance]\n}\nFUNC plain(n) { RETURN n }\nFUNC odd(n) {\n    n += 1 >> not the first thing\n}\np = point_at(0, 0, 90, 5)\nPRINT(plain(1), odd(2), dist(1, 4))\n');
+  await page.evaluate((p) => window.jlbIde.workspace.openFile(p), file);
+  await page.waitForSelector('.tab.active:has-text("docs_test.jlb")');
+  const own = await hoverText(11, 'point_at');
+  assert.match(own, /Defined on line 2/);
+  assert.match(own, /Where you end up going `distance`\nfrom \(x, y\) at `angle` degrees\./);
+  assert.doesNotMatch(own, /Inputs are copies/);
+  assert.match(await hoverText(12, 'plain'), /Inputs are copies/);
+  assert.match(await hoverText(12, 'odd'), /Inputs are copies/);
+  const imported = await hoverText(12, 'dist');
+  assert.match(imported, /From geo\.jlb/);
+  assert.match(imported, /How far apart\ntwo points are\./);
+});
+
 test('no errors in the page', () => {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []);
 });
