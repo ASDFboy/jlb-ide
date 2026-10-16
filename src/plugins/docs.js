@@ -15,11 +15,13 @@ import p07 from '../docs/07-tables-and-text.md';
 import p08 from '../docs/08-errors.md';
 import p09 from '../docs/09-programs-and-files.md';
 import p10 from '../docs/10-built-ins.md';
+import p11 from '../docs/11-tasks.md';
 
 const PAGES = {
   'README.md': index, '01-getting-started.md': p01, '02-syntax.md': p02, '03-values-and-types.md': p03,
   '04-operators.md': p04, '05-control-flow.md': p05, '06-functions.md': p06, '07-tables-and-text.md': p07,
   '08-errors.md': p08, '09-programs-and-files.md': p09, '10-built-ins.md': p10,
+  '11-tasks.md': p11,
 };
 
 /** Short names other features use with docs.show(). */
@@ -32,6 +34,7 @@ const ALIASES = {
   numbers: ['03-values-and-types.md', 'numbers-are-exact'],
   tables: ['07-tables-and-text.md'],
   errors: ['08-errors.md'],
+  tasks: ['11-tasks.md'],
 };
 
 const slug = (s) => s.toLowerCase().replace(/<[^>]+>/g, '').replace(/[^\w\- ]/g, '').trim().replace(/ /g, '-');

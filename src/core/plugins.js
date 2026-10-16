@@ -262,6 +262,10 @@ export class Plugins {
         get current() { return ide.runner.current(); },
         /** { id, name, path } for one interpreter ("rust", "c", ...); path is null if it isn't set up. */
         resolve: (id) => ide.runner.resolve(id),
+        /** The interpreter a file chooses on its first line (>> @interpreter c): its id, or null. */
+        pinned: (doc) => ide.runner.pinnedId(doc),
+        /** The interpreter that runs a file: the one its first line chooses, or else `current`. */
+        forDoc: (doc) => ide.runner.forDoc(doc),
         /** Runs the current file. { debug: true } runs it under the debugger (Rust interpreter). */
         start: (opts) => ide.runner.run(opts),
         stop: () => ide.runner.stop(),

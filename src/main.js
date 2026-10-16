@@ -143,8 +143,9 @@ function statusBar(ide) {
     probs.className = 'status-item probs' + (e ? ' has-errors' : w ? ' has-warnings' : '');
   });
   const showInterp = () => {
-    const it = ide.runner.current();
-    interp.textContent = it ? `${it.name} interpreter${it.path ? '' : ' (not set up)'}` : '';
+    const it = ide.runner.forDoc(ide.workspace.active);
+    const pinned = ide.runner.pinnedId(ide.workspace.active);
+    interp.textContent = it ? `${it.name} interpreter${it.path ? '' : ' (not set up)'}${pinned ? ' (chosen by this file)' : ''}` : '';
   };
   ide.events.on('interpreter-change', showInterp);
   showInterp();

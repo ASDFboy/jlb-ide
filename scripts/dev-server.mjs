@@ -171,11 +171,12 @@ const commands = {
   async stop_program({ id }) {
     runs.get(id)?.kill();
   },
-  async run_capture({ interpreter, file, cwd, args, input, timeout_ms }) {
+  async run_capture({ interpreter, file, cwd, args, input, timeout_ms, stay }) {
     if (!fss.existsSync(interpreter)) throw `couldn't find the interpreter at ${interpreter} (check Settings → Interpreters)`;
     return new Promise((resolve) => {
       const start = performance.now();
-      const c = spawn(interpreter, [...(args || []), file], { cwd: cwd || undefined });
+      const env = stay ? { ...process.env, JLB_HANDED_OFF: '1' } : process.env;
+      const c = spawn(interpreter, [...(args || []), file], { cwd: cwd || undefined, env });
       let stdout = '';
       let stderr = '';
       let timedOut = false;

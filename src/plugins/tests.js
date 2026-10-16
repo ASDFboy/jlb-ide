@@ -4,6 +4,7 @@
 // It's the same layout the interpreters' own tests use (tests/cases).
 
 import { runToEnd, normalize, diffLines, formatMs } from './outputs.js';
+import { askedInterpreter } from '../lang/data.js';
 
 const SKIP = /^(\.|node_modules$|target$|dist$)/;
 
@@ -74,7 +75,19 @@ export default {
     const runOne = async (t, ids) => {
       const expected = normalize(await api.invoke('read_text', { path: t.out }).catch(() => ''));
       const input = t.inp ? await api.invoke('read_text', { path: t.inp }).catch(() => '') : '';
-      const res = results.get(t.path) || {};
+      // A test can choose its interpreter on its first line (>> @interpreter c). Running
+      // with one interpreter follows that; running with both checks both anyway.
+      const both = ids.length > 1;
+      let fresh = false;
+      if (!both) {
+        const [head] = await api.invoke('read_texts', { paths: [t.path], max_bytes: 300 }).catch(() => ['']);
+        const asked = askedInterpreter(head || '');
+        if (asked && api.run.resolve(asked)) {
+          ids = [asked];
+          fresh = true;
+        }
+      }
+      const res = fresh ? {} : results.get(t.path) || {};
       for (const id of ids) {
         const it = api.run.resolve(id);
         if (!it?.path) {
@@ -84,7 +97,7 @@ export default {
         res[id] = { running: true };
         results.set(t.path, res);
         render();
-        const r = await runToEnd(api, it.path, t.path, { input, timeout: api.settings.get('timeout') * 1000 });
+        const r = await runToEnd(api, it.path, t.path, { input, timeout: api.settings.get('timeout') * 1000, stay: both });
         res[id] = r.error ? { error: r.error, pass: false, expected } : { pass: !r.timedOut && r.text === expected, text: r.text, expected, ms: r.ms, timedOut: r.timedOut };
       }
       results.set(t.path, res);
@@ -141,7 +154,8 @@ export default {
       if (!doc.path || api.workspace.isDirty(doc)) {
         if (!(await api.workspace.save())) return;
       }
-      const it = api.run.current?.path ? api.run.current : api.run.resolve('rust');
+      const chosen = api.run.forDoc(doc);
+      const it = chosen?.path ? chosen : api.run.resolve('rust');
       if (!it?.path) return toast('No interpreter is set up.', { kind: 'error' });
       const base = doc.path.replace(/\.jlb$/i, '');
       const inp = await api.invoke('path_info', { path: base + '.in' }).then((i) => (i.exists ? base + '.in' : null)).catch(() => null);

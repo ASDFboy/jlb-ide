@@ -4,6 +4,7 @@
 import { h, clear, icon, toast } from './ui.js';
 import { invoke, listen, pickOpen } from './backend.js';
 import { showKey } from './commands.js';
+import { askedInterpreter } from '../lang/data.js';
 
 const MARK = '\u001e';
 const MAX_OUTPUT = 400_000; // characters kept in the Output panel
@@ -80,6 +81,20 @@ export class Runner {
     return { ...it, path };
   }
 
+  /** The interpreter a file chooses on its first line (>> @interpreter c): its id, or null. */
+  pinnedId(doc = this.ide.workspace.active) {
+    if (!doc?.state) return null;
+    const state = doc === this.ide.workspace.active ? this.ide.editor.view.state : doc.state;
+    const id = askedInterpreter(state.doc.line(1).text);
+    return id && this.interpreters.has(id) ? id : null;
+  }
+
+  /** The interpreter that runs `doc`: the one its first line chooses, or else the chosen one. */
+  forDoc(doc) {
+    const id = this.pinnedId(doc);
+    return id ? this.resolve(id) : this.current();
+  }
+
   // ---------- toolbar ----------
 
   toolbar() {
@@ -88,21 +103,30 @@ export class Runner {
     this.stopBtn = h('button.stop-btn', { title: 'Stop (Shift+F5)', 'aria-label': 'Stop', hidden: true, on: { click: () => this.stop() } }, icon('stop', 14));
     this.renderSwitch();
     this.renderRunButton();
+    // A file's first line can choose the interpreter: the switch shows it, locked.
+    const pinChanged = () => this.pinnedId() !== this.shownPin && this.renderSwitch();
+    this.ide.events.on('active-change', pinChanged);
+    this.ide.events.on('editor-change', pinChanged);
     return h('div.run-controls', this.switchEl, this.runBtn, this.stopBtn);
   }
 
   renderSwitch() {
     if (!this.switchEl) return;
     clear(this.switchEl);
-    const chosen = this.current()?.id;
+    const pinned = (this.shownPin = this.pinnedId());
+    const chosen = pinned || this.current()?.id;
     for (const it of this.interpreters.values()) {
       const r = this.resolve(it.id);
-      this.switchEl.append(h(`button.seg-btn${it.id === chosen ? '.on' : ''}${r.path ? '' : '.missing'}`, {
+      const on = it.id === chosen;
+      let title = r.path ? `Run with the ${it.name} interpreter\n${r.path}` : `The ${it.name} interpreter isn't set up yet`;
+      if (pinned) title = `This file's first line chooses the ${this.interpreters.get(pinned).name} interpreter (>> @interpreter ${pinned}).${on && r.path ? '\n' + r.path : ''}`;
+      this.switchEl.append(h(`button.seg-btn${on ? '.on' : ''}${r.path ? '' : '.missing'}`, {
         role: 'radio',
-        'aria-checked': it.id === chosen ? 'true' : 'false',
-        title: r.path ? `Run with the ${it.name} interpreter\n${r.path}` : `The ${it.name} interpreter isn't set up yet`,
-        on: { click: () => this.ide.settings.set('run.interpreter', it.id) },
-      }, it.name));
+        'aria-checked': on ? 'true' : 'false',
+        disabled: pinned && !on ? true : undefined,
+        title,
+        on: { click: () => !pinned && this.ide.settings.set('run.interpreter', it.id) },
+      }, pinned && on ? icon('lock', 11) : null, it.name));
     }
     this.ide.events.emit('interpreter-change', this.current());
   }
@@ -129,11 +153,22 @@ export class Runner {
     const ws = this.ide.workspace;
     const doc = ws.current();
     if (!doc) return toast('Open or create a .jlb file to run it.');
-    let it = this.current();
+    const pinned = this.pinnedId(doc);
+    let it = this.forDoc(doc);
     const dbg = this.ide.plugins.services.get('debugger');
     let note = null;
-    if (debug === 'auto') debug = !!dbg?.wanted(doc);
-    if (debug && it?.id !== 'rust') {
+    const auto = debug === 'auto';
+    if (auto) debug = !!dbg?.wanted(doc);
+    if (debug && pinned && pinned !== 'rust') {
+      // The file chose another interpreter, and only Rust can debug.
+      if (!auto || stepFirst || !dbg) {
+        this.ide.layout.showPanel('output');
+        this.system(`${doc.name} chooses the ${it?.name} interpreter on its first line (>> @interpreter ${pinned}), and debugging only works with Rust. Change that line to >> @interpreter rust (or remove it) to debug this file.`, 'error');
+        return;
+      }
+      note = `Breakpoints only work with the Rust interpreter, and this file chooses ${it?.name} on its first line, so it runs without stopping at them.`;
+      debug = false;
+    } else if (debug && it?.id !== 'rust') {
       const rust = this.resolve('rust');
       if (stepFirst || !dbg) {
         note = `Debugging uses the Rust interpreter, so this runs with Rust instead of ${it?.name}.`;

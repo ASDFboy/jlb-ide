@@ -5,6 +5,7 @@
 export const KEYWORDS = [
   'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
   'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
+  'CONST', 'START',
 ];
 
 export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
@@ -21,7 +22,7 @@ export const BUILTINS = {
   STR: ['STR(x)', 'The value as text, written the way PRINT shows it.'],
   ENG: ['ENG(n)', 'Engineering notation: ENG(1500) is "1.5e3".'],
   HEX: ['HEX(n)', 'Hex text for a whole number: HEX(255) is "0xFF".'],
-  TYPE: ['TYPE(x)', '"NUMBER", "TEXT", "BOOL", "NULL", "TABLE" or "FUNC".'],
+  TYPE: ['TYPE(x)', '"NUMBER", "TEXT", "BOOL", "NULL", "TABLE", "FUNC" or "TASK".'],
   LEN: ['LEN(x)', 'Numbered items in a table, characters in text, or characters in a number written out (LEN(-2.5) is 4).'],
   ERROR: ['ERROR(message)', 'Raises an error with your message. TRY ... FAIL can catch it.'],
   INSERT: ['INSERT(t, value, pos)', 'Puts value so it ends up at pos (negative counts from the end). Changes t, and also gives back the result. Works on text too.'],
@@ -47,7 +48,10 @@ export const BUILTINS = {
   RANDOM: ['RANDOM(min, max, [decimals], [seed])', 'A random number from min to max, including both. Decimals follow min and max unless you set them; a seed makes it repeatable.'],
   TIME: ['TIME([decimals])', 'Seconds since the program started.'],
   DELTA_TIME: ['DELTA_TIME([decimals])', 'Seconds since the last DELTA_TIME() call.'],
-  WAIT: ['WAIT(seconds)', 'Pauses the program.'],
+  WAIT: ['WAIT(seconds)', 'Pauses the program. While tasks are running, the others carry on during the wait.'],
+  AWAIT: ['AWAIT(task)', 'Waits until the task (from START) has finished, and gives back what it returned. With a table of tasks, waits for all of them and gives back a table. An error in the task comes out here, where TRY can catch it.'],
+  DONE: ['DONE(task)', 'TRUE once the task has finished.'],
+  CANCEL: ['CANCEL(task)', 'Stops the task. When CANCEL comes back it has finished, with NULL as its result.'],
   SIN: ['SIN(degrees)', 'Sine, in degrees. Results are rounded to 12 decimals, so SIN(30) is exactly 0.5.'],
   COS: ['COS(degrees)', 'Cosine, in degrees.'],
   TAN: ['TAN(degrees)', 'Tangent, in degrees. TAN(90) is an error.'],
@@ -87,6 +91,8 @@ export const KEYWORD_HELP = {
   IMPORT: 'Runs another file and adds its names to this file.',
   LOAD: 'Runs another file and gives back its names as a table named after the file (LOAD "My-Tools.jlb" gives my_tools).',
   END: 'Stops the whole program immediately, with no error report. TRY does not catch it.',
+  CONST: 'CONST name = value makes a constant: a name whose value can never change, not even the tables inside it. Copies of it are ordinary values. It must be a new name in that place.',
+  START: 'START f(x) runs the function as a task, side by side with the rest of the program, and gives back the task right away. Use AWAIT(task) for its result. Tasks take turns: about a thousand statements each, or sooner at WAIT and AWAIT.',
   TRUE: 'True. Loosely equal to 1 ("TRUE" == TRUE), but TRUE === 1 is FALSE.',
   FALSE: 'False. Loosely equal to 0.',
   NULL: 'No value at all. Counts as 0 in math, as nothing when joined to text, and as false in conditions.',
@@ -138,6 +144,17 @@ export const OPERATORS = {
   '...': ['Rest of the inputs', 'FUNC total(...nums) collects every extra input into a table.'],
   '>>': ['Comment', '>> starts a comment to the end of the line. >>> starts a comment that runs until <<<.'],
 };
+
+/**
+ * The interpreter a program asks for on its first line (>> @interpreter rust), lowercase,
+ * or null. The same rules as the interpreters: only the first line, and it's a comment.
+ */
+export function askedInterpreter(text) {
+  const first = String(text).slice(0, 300).split('\n')[0].replace(/^﻿/, '').trim();
+  if (!first.startsWith('>>') || first.startsWith('>>>')) return null;
+  const m = first.slice(2).trimStart().match(/^@interpreter(\s.*)?$/s);
+  return m && m[1] ? m[1].trim().toLowerCase() : null;
+}
 
 /** Names of every built-in command, for highlighting. */
 export const BUILTIN_NAMES = Object.keys(BUILTINS);

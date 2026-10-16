@@ -234,12 +234,16 @@ fn read_capped(mut r: impl Read) -> String {
 }
 
 /// Runs a program to the end with `input` typed in, and gives back everything it printed.
-/// It's stopped after `timeout_ms`.
+/// It's stopped after `timeout_ms`. With `stay`, this interpreter runs it even when its
+/// first line asks for the other one (>> @interpreter), as Compare needs.
 #[tauri::command]
-pub async fn run_capture(interpreter: String, file: String, cwd: String, args: Vec<String>, input: String, timeout_ms: u64) -> Result<Captured, String> {
+pub async fn run_capture(interpreter: String, file: String, cwd: String, args: Vec<String>, input: String, timeout_ms: u64, stay: Option<bool>) -> Result<Captured, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut cmd = command(&interpreter);
         cmd.args(&args).arg(&file).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if stay == Some(true) {
+            cmd.env("JLB_HANDED_OFF", "1");
+        }
         if !cwd.is_empty() {
             cmd.current_dir(&cwd);
         }

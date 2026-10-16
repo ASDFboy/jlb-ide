@@ -39,8 +39,8 @@ export default {
       render();
       const timeout = api.settings.get('timeout') * 1000;
       // One after the other, so the times aren't skewed by running together.
-      const r = await runToEnd(api, rust.path, doc.path, { input: withNewline(input), timeout });
-      const cr = await runToEnd(api, c.path, doc.path, { input: withNewline(input), timeout });
+      const r = await runToEnd(api, rust.path, doc.path, { input: withNewline(input), timeout, stay: true });
+      const cr = await runToEnd(api, c.path, doc.path, { input: withNewline(input), timeout, stay: true });
       result = { doc, rust: r, c: cr, input };
       busy = false;
       render();

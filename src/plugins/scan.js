@@ -111,6 +111,29 @@ export function scan(text) {
   const refs = [];
   const labels = [];
   const entries = [];
+  const consts = []; // CONST names: { name, off, func }
+  const COMMANDS = new Set(['INSERT', 'DROP', 'UNDEFINE']);
+  // How the name at toks[k] gets changed, if it does: 'assign' (x = 1, x += 1),
+  // 'entry' (x.a = 1, x[2] += 1) or 'command' (INSERT(x, ...), DROP, UNDEFINE).
+  const writeAt = (k) => {
+    if (toks[k - 1]?.t === '(' && COMMANDS.has(toks[k - 2]?.t)) return 'command';
+    let j = k + 1;
+    if (ASSIGN.has(toks[j]?.t) || COMPOUND.has(toks[j]?.t)) return 'assign';
+    let moved = false;
+    while (j < toks.length) {
+      if (toks[j].t === '.' && isName(toks[j + 1]?.t)) j += 2;
+      else if (toks[j].t === '[') {
+        let d = 0;
+        for (; j < toks.length; j++) {
+          if (toks[j].t === '[') d++;
+          else if (toks[j].t === ']' && --d === 0) break;
+        }
+        j++;
+      } else break;
+      moved = true;
+    }
+    return moved && (ASSIGN.has(toks[j]?.t) || COMPOUND.has(toks[j]?.t)) ? 'entry' : null;
+  };
   const currentFunc = () => {
     for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].kind === 'func') return scopes[i].func;
     return -1;
@@ -130,6 +153,10 @@ export function scan(text) {
     return null;
   };
   const ref = (name, off, extra) => refs.push({ name, off, func: currentFunc(), block: blockOf(name), ...extra });
+  const refAt = (k) => {
+    const write = writeAt(k);
+    ref(toks[k].t, toks[k].off, write ? { write } : undefined);
+  };
   const visibleBlockNames = () => {
     const names = new Set();
     for (let i = scopes.length - 1; i >= 0; i--) {
@@ -223,6 +250,12 @@ export function scan(text) {
       k++;
       continue;
     }
+    if (t === 'CONST' && isName(next)) {
+      // CONST x = ... makes a new name where it is: like LOCAL inside a function.
+      consts.push({ name: next, off: toks[k + 1].off, func: currentFunc() });
+      if (currentFunc() >= 0) funcs[currentFunc()].declared.add(next);
+      continue; // x = ... is read next, as usual
+    }
     if (t === 'LOCAL' && isName(next)) {
       giveValue(next, toks[k + 1].off);
       if (currentFunc() >= 0) funcs[currentFunc()].declared.add(next);
@@ -240,7 +273,7 @@ export function scan(text) {
       continue;
     }
     if (next === ':') continue; // a name in a table: [name: 1]
-    ref(t, off);
+    refAt(k);
     if (ASSIGN.has(next)) {
       giveValue(t, off);
       // t = [name: 1, other: 2] names its entries.
@@ -279,6 +312,7 @@ export function scan(text) {
 
   return {
     funcs,
+    consts,
     globals,
     fields,
     loads,
