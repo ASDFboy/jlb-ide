@@ -86,7 +86,7 @@ async function readDisk(api, path, cached) {
 function ownNames(path, info) {
   const out = new Map();
   for (const [name, off] of info.globals) {
-    const fn = info.funcs.find((f) => f.name === name && f.inFunc < 0);
+    const fn = info.funcs.find((f) => f.name === name && (f.inFunc < 0 || f.global));
     const at = fn ? { line: fn.line, col: fn.nameCol || fn.col } : info.at(off);
     out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params, doc: fn?.doc });
   }

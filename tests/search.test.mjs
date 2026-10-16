@@ -32,7 +32,7 @@ test('picks files by name or folder', () => {
 });
 
 test('knows which names are the same name', () => {
-  const info = scan('count = 0\nFUNC f(n) {\n    count += n\n    made = 1\n    LOCAL count2 = 2\n    FOR i IN [1] { PRINT(i) }\n}\nFOR i IN [2] { PRINT(i) }\n');
+  const info = scan('count = 0\nFUNC f(n) {\n    count += n\n    made = 1\n    GLOBAL shared = 1\n    LOCAL count2 = 2\n    FOR i IN [1] { PRINT(i) }\n}\nFOR i IN [2] { PRINT(i) }\n');
   const where = (name) => info.refs.filter((r) => r.name === name).map((r) => bindingOf(info, r));
   assert.deepEqual(where('count'), ['global', 'global']);
   assert.deepEqual(where('n'), ['func:0', 'func:0']);
@@ -42,8 +42,10 @@ test('knows which names are the same name', () => {
   assert.equal(loops[0], loops[1]);
   assert.equal(loops[2], loops[3]);
   assert.notEqual(loops[0], loops[2]);
-  // Inside a function, a name that comes from another file is the outside one.
-  assert.deepEqual(where('made').concat(info.refs.filter((r) => r.name === 'made').map((r) => bindingOf(info, r, new Set(['made'])))), ['func:0', 'global']);
+  // Inside a function, a name given a value is its own, even when another file has it,
+  // unless GLOBAL comes first.
+  assert.deepEqual(info.refs.filter((r) => r.name === 'made').map((r) => bindingOf(info, r, new Set(['made']))), ['func:0']);
+  assert.deepEqual(where('shared'), ['global']);
 });
 
 test('works out import paths like the interpreter', () => {

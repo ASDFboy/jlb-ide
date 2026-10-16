@@ -104,7 +104,7 @@ export const jlbStream = {
       if (upper && !lower) {
         if (w === 'TRUE' || w === 'FALSE') return 'bool';
         if (w === 'NULL') return 'null';
-        state.prev = w;
+        state.prev = w === 'GLOBAL' && prev === 'FUNC' ? 'FUNC' : w;
         if (KW.has(w)) return 'keyword';
         if (COMMANDS.has(w)) return 'variableName.standard';
         return 'invalid';
@@ -113,7 +113,7 @@ export const jlbStream = {
       if (prev === 'FUNC') return 'variableName.function.definition';
       if (prev === 'POINT' || prev === 'GOTO') return 'labelName';
       if (prev === '.') return 'propertyName';
-      if (prev === 'LOCAL' || prev === 'CONST' || prev === 'FOR' || prev === 'FAIL') return 'variableName.definition';
+      if (prev === 'LOCAL' || prev === 'CONST' || prev === 'GLOBAL' || prev === 'FOR' || prev === 'FAIL') return 'variableName.definition';
       if (stream.match(/^\s*\(/, false)) return 'variableName.function';
       return 'variableName';
     }

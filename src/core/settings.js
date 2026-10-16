@@ -64,7 +64,10 @@ export class Settings {
   }
 
   reset(key) {
-    this.set(key, this.defs.get(key)?.default);
+    if (this.defs.has(key) || !(key in this.values)) return this.set(key, this.defs.get(key)?.default);
+    delete this.values[key];
+    this.scheduleSave();
+    this.events.emit('change', key, undefined);
   }
 
   /** Calls fn(value, key) whenever a setting changes; a key ending in "." matches a whole group. */

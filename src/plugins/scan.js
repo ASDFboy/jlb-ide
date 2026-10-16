@@ -77,13 +77,13 @@ export function loadName(file) {
 
 /**
  * Where a name in `refs` lives: "block:<id>" for a FOR or FAIL name, "func:<index>" for
- * a function's own local, or "global" for an outside name. Inside a function, giving a
- * value to a name that exists outside changes the outside one, so `outside` lists the
- * names that come from other files.
+ * a function's own local, or "global" for an outside name. Inside a function, a name
+ * given a value there is its own (unless GLOBAL comes first); others are outside names,
+ * so `outside` lists the names that come from other files.
  */
 export function bindingOf(info, r, outside) {
   if (r.block != null) return 'block:' + r.block;
-  if (r.func < 0) return 'global';
+  if (r.func < 0 || r.global) return 'global';
   const f = info.funcs[r.func];
   if (f.declared.has(r.name)) return 'func:' + r.func;
   if (info.globals.has(r.name) || outside?.has(r.name)) return 'global';
@@ -163,11 +163,21 @@ export function scan(text) {
     for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].kind === 'func') return scopes[i].func;
     return -1;
   };
-  const giveValue = (name, off) => {
+  // GLOBAL before a name, FUNC or CONST: the next name made is an outside one.
+  let globalNext = false;
+  // Inside functions: names that become the function's own while an outside one has the
+  // same name, and x += 1 on an outside x (an error without GLOBAL).
+  const shadows = [];
+  const outsideChanges = [];
+  const giveValue = (name, off, global = false) => {
     define(name, off);
+    if (blockOf(name) != null) return; // the FOR or FAIL name
     const f = currentFunc();
-    if (f >= 0) funcs[f].locals.add(name);
-    else if (!globals.has(name)) globals.set(name, off);
+    if (f >= 0 && !global) {
+      if (!funcs[f].declared.has(name)) shadows.push({ name, off, func: f });
+      funcs[f].locals.add(name);
+      funcs[f].declared.add(name);
+    } else if (!globals.has(name)) globals.set(name, off);
   };
   // The FOR or FAIL block a name belongs to, if any (stopping at the function it's in).
   const blockOf = (name) => {
@@ -206,18 +216,26 @@ export function scan(text) {
       depth = Math.max(0, depth - 1);
       continue;
     }
+    if (t === 'GLOBAL') {
+      globalNext = true;
+      continue;
+    }
     if (t === 'FUNC') {
       let j = k + 1;
       let name = null;
       const index = funcs.length;
-      const fn = { name, params: [], locals: new Set(), declared: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc() };
+      // GLOBAL FUNC name or FUNC GLOBAL name: a function the whole file can use.
+      const global = globalNext || (toks[j]?.t === 'GLOBAL' && isName(toks[j + 1]?.t));
+      if (toks[j]?.t === 'GLOBAL') j++;
+      globalNext = false;
+      const fn = { name, params: [], locals: new Set(), declared: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc(), global };
       funcs.push(fn);
       if (isName(toks[j]?.t)) {
         fn.name = name = toks[j].t;
         fn.nameCol = where(toks[j].off).col;
-        // A named function is a value like any other: global when made outside functions.
-        giveValue(name, toks[j].off);
-        ref(name, toks[j].off);
+        // A named function is a value like any other: its function's own when made inside one.
+        giveValue(name, toks[j].off, global);
+        ref(name, toks[j].off, global ? { global } : undefined);
         j++;
       }
       const names = [];
@@ -279,13 +297,13 @@ export function scan(text) {
     }
     if (t === 'CONST' && isName(next)) {
       // CONST x = ... makes a new name where it is: like LOCAL inside a function.
-      consts.push({ name: next, off: toks[k + 1].off, func: currentFunc() });
-      if (currentFunc() >= 0) funcs[currentFunc()].declared.add(next);
-      continue; // x = ... is read next, as usual
+      consts.push({ name: next, off: toks[k + 1].off, func: globalNext ? -1 : currentFunc() });
+      if (!globalNext && currentFunc() >= 0) funcs[currentFunc()].declared.add(next); // meant to be its own
+      continue; // x = ... is read next, as usual (GLOBAL still applies to it)
     }
     if (t === 'LOCAL' && isName(next)) {
-      giveValue(next, toks[k + 1].off);
       if (currentFunc() >= 0) funcs[currentFunc()].declared.add(next);
+      giveValue(next, toks[k + 1].off);
       ref(next, toks[k + 1].off);
       k++;
       continue;
@@ -300,9 +318,12 @@ export function scan(text) {
       continue;
     }
     if (next === ':') continue; // a name in a table: [name: 1]
-    refAt(k);
+    const global = globalNext;
+    globalNext = false;
+    if (global) ref(t, off, { write: writeAt(k), global });
+    else refAt(k);
     if (ASSIGN.has(next)) {
-      giveValue(t, off);
+      giveValue(t, off, global);
       // t = [name: 1, other: 2] names its entries.
       if (toks[k + 2]?.t === '[') {
         let d = 0;
@@ -317,8 +338,12 @@ export function scan(text) {
       continue;
     }
     // x += 1 reads x first, so x needs a value already.
-    uses.push({ name: t, off, ...where(off), func: currentFunc(), depth, blockNames: visibleBlockNames() });
-    if (COMPOUND.has(next)) giveValue(t, off);
+    uses.push({ name: t, off, ...where(off), func: currentFunc(), depth, blockNames: visibleBlockNames(), global });
+    if (COMPOUND.has(next)) {
+      const f = currentFunc();
+      if (f >= 0 && !global && !funcs[f].declared.has(t) && blockOf(t) == null) outsideChanges.push({ name: t, off, op: next, func: f });
+      else giveValue(t, off, global);
+    }
   }
 
   // IMPORT "helpers.jlb" and LOAD "My-Tools.jlb" (LOAD gives a table called my_tools).
@@ -340,6 +365,8 @@ export function scan(text) {
   return {
     funcs,
     consts,
+    shadows,
+    outsideChanges,
     globals,
     fields,
     loads,

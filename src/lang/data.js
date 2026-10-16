@@ -5,7 +5,7 @@
 export const KEYWORDS = [
   'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
   'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
-  'CONST', 'START',
+  'CONST', 'START', 'GLOBAL',
 ];
 
 export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
@@ -83,7 +83,8 @@ export const KEYWORD_HELP = {
   SKIP: 'Jumps straight to the next round of the loop.',
   FUNC: 'Makes a function. Inputs are copies unless marked with @; inputs can have defaults (n = 10), and ...rest collects extras into a table.',
   RETURN: 'Leaves the function and gives back a value. Without RETURN a function gives back NULL.',
-  LOCAL: 'A variable that belongs only to this function, even if an outside variable has the same name. Only allowed inside functions.',
+  LOCAL: 'A variable that belongs only to this function. Names given a value in a function already are its own, so LOCAL is for making one before it has a value (LOCAL x starts as NULL), or saying so clearly. Only allowed inside functions.',
+  GLOBAL: 'Inside a function, names given a value are its own. GLOBAL before the name gives the value to the file\'s outside name instead: GLOBAL score += 1, GLOBAL FUNC helper() { }, GLOBAL CONST max = 10. Outside names can always be read, and their table entries changed, without it.',
   TRY: 'Runs a block; if an error happens, the FAIL block runs instead of crashing.',
   FAIL: 'FAIL err { } runs when the TRY block errors. err.message, err.line and err.file tell you what happened.',
   GOTO: 'Jumps to a POINT in the same function or file, forward or backward. It can jump out of blocks but not into them.',

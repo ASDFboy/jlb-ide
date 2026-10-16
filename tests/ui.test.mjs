@@ -179,6 +179,14 @@ test('suggests commands while typing', async () => {
   await page.keyboard.type('PRI');
   await page.waitForSelector('.cm-tooltip-autocomplete');
   assert.match(await page.locator('.cm-tooltip-autocomplete').innerText(), /PRINT/);
+  // Tab accepts; Enter is a new line even with suggestions showing.
+  await page.keyboard.press('Tab');
+  assert.match(await page.evaluate(() => window.jlbIde.editor.view.state.doc.toString()), /^PRINT/);
+  await setText('');
+  await page.keyboard.type('PRI');
+  await page.waitForSelector('.cm-tooltip-autocomplete');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => window.jlbIde.editor.view.state.doc.toString()), 'PRI\n');
   await page.keyboard.press('Escape');
 });
 
@@ -1167,6 +1175,59 @@ test('a comment at the top of a function is its hover text', async () => {
   const imported = await hoverText(12, 'dist');
   assert.match(imported, /From geo\.jlb/);
   assert.match(imported, /How far apart\ntwo points are\./);
+});
+
+test('themes, and changing any color', async () => {
+  const cssVar = (v) => page.evaluate((x) => getComputedStyle(document.documentElement).getPropertyValue(x).trim(), v);
+  const nightBg = await cssVar('--bg');
+  await page.evaluate(() => window.jlbIde.settings.set('ui.theme', 'dracula'));
+  assert.equal(await cssVar('--bg'), '#282a36');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'night');
+  await page.keyboard.press('Control+,');
+  await page.fill('.settings-search', 'keywords');
+  const row = page.locator('.color-row:has-text("Keywords (IF, FOR, FUNC)")');
+  assert.equal(await row.locator('.color-text').inputValue(), '#ff79c6');
+  await row.locator('.color-text').fill('#123456');
+  await row.locator('.color-text').press('Enter');
+  await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--syn-keyword').trim() === '#123456');
+  assert.deepEqual(await page.evaluate(() => window.jlbIde.settings.get('colors.dracula')), { '--syn-keyword': '#123456' });
+  // A see-through color keeps its see-through amount when picked.
+  await page.fill('.settings-search', 'selected text');
+  const sel = page.locator('.color-row:has-text("Selected text")');
+  await sel.locator('.color-pick').evaluate((el) => {
+    el.value = '#ff0000';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  assert.match(await cssVar('--select'), /^rgba\(255, 0, 0, 0\.2\)$/);
+  await page.fill('.settings-search', 'colors');
+  await page.click('button:has-text("Reset all colors")');
+  assert.equal(await cssVar('--syn-keyword'), '#ff79c6');
+  // Night comes from the stylesheet, and its colors can be changed too.
+  await page.evaluate(() => window.jlbIde.settings.set('ui.theme', 'night'));
+  await page.fill('.settings-search', 'background (editor');
+  const bg = page.locator('.color-row:has-text("Background (editor and main area)")');
+  assert.equal(await bg.locator('.color-text').inputValue(), nightBg);
+  await bg.locator('.color-text').fill('#000000');
+  await bg.locator('.color-text').press('Enter');
+  assert.equal(await cssVar('--bg'), '#000000');
+  await page.click('.color-row:has-text("Background (editor and main area)") .setting-reset');
+  assert.equal(await cssVar('--bg'), nightBg);
+  await page.keyboard.press('Escape');
+  for (const id of ['onedark', 'nord', 'gruvbox', 'solarized', 'contrast', 'solarlight', 'github', 'day']) {
+    await page.evaluate((t) => window.jlbIde.settings.set('ui.theme', t), id);
+    assert.ok(await cssVar('--syn-func'), id);
+  }
+  await page.evaluate(() => window.jlbIde.settings.set('ui.theme', 'system'));
+});
+
+test('names in a function are its own unless GLOBAL', async () => {
+  await setText('score = 1\nFUNC add() {\n    score += 1\n    total = 5\n    GLOBAL score -= 1\n}\nadd()\n');
+  const probs = await problems();
+  assert.match(probs, /score isn't one of add\(\)'s own variables/);
+  assert.doesNotMatch(probs, /This total/);
+  assert.match(await hoverText(5, 'GLOBAL'), /outside name/);
+  await setText('score = 1\nFUNC add() {\n    score = 2\n}\n');
+  assert.match(await problems(), /This score is add\(\)'s own, separate from the outside score/);
 });
 
 test('no errors in the page', () => {
