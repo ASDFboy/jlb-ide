@@ -173,6 +173,15 @@ test('explains operators and commands on hover', async () => {
   assert.match(await hoverText(2, 'IF'), /truth|true/i);
 });
 
+test('shows the comment at the end of a variable\'s line on hover', async () => {
+  await setText('score = 10 >> the player\'s points\nCONST max_hp = 100 >> most health\nhero = [\n    name: "Ann", >> what to call them\n    hp: 10\n]\nDEF f() {\n    score = 1 >> a different score, just for f\n    PRINT(score)\n}\nPRINT(score, max_hp, hero.name)\n');
+  assert.match(await hoverText(11, 'score'), /the player's points/);
+  assert.match(await hoverText(11, 'max_hp'), /CONST max_hp[\s\S]*most health/);
+  assert.match(await hoverText(11, 'name'), /Entry hero\.name[\s\S]*what to call them/);
+  assert.match(await hoverText(9, 'score'), /just for f/);
+  assert.doesNotMatch(await hoverText(11, 'hero'), /what to call/);
+});
+
 test('knows the graphics commands', async () => {
   await setText('WINDOW(200, 100, "Demo", 2)\nWHILE WINDOW_OPEN() {\n    CLEAR("navy")\n    CIRCLE(MOUSE().x, MOUSE().y, 10, "red", [alpha: 128])\n    SHOW()\n}\n');
   assert.match(await hoverText(4, 'CIRCLE'), /CIRCLE\(x, y, radius, color/);

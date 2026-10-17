@@ -149,6 +149,8 @@ export class Language {
     if (this.ide.settings.get('editor.hoverCtrl') && !this.ctrlHeld) return null;
     const ctx = this.context(view.state, pos);
     const doc = view.state.doc;
+    let main = null;
+    let fallback = null;
     for (const p of this.hovers) {
       let r;
       try {
@@ -159,23 +161,34 @@ export class Language {
       // Another file (or an edit) may have come in while waiting; the place is gone.
       if (view.state.doc !== doc) return null;
       if (!r) continue;
-      const range = r.range || ctx.op || ctx.word || { from: pos, to: pos };
-      return {
-        pos: range.from,
-        end: range.to,
-        above: true,
-        create: () => {
-          const dom = h('div.hover-card',
-            r.title ? h('div.hover-title', r.code === false ? r.title : h('code', r.title)) : null,
-            r.subtitle ? h('div.hover-sub', r.subtitle) : null,
-            r.body ? h('div.hover-body', r.body) : null,
-            r.example ? h('pre.hover-example', r.example) : null,
-            r.more ? h('button.hover-more', { on: { mousedown: (e) => { e.preventDefault(); r.more.run(); } } }, r.more.label) : null);
-          return { dom };
-        },
-      };
+      // A fallback (like a variable's comment) gives way to other info, such as its value
+      // while debugging, and is shown under it.
+      if (r.fallback) fallback ||= r;
+      else main ||= r;
+      if (main && fallback) break;
     }
-    return null;
+    if (main && fallback?.body) main = { ...main, note: fallback.body };
+    return main || fallback ? this.hoverCard(main || fallback, ctx, pos) : null;
+  }
+
+  /** The hover box for a provider's result. */
+  hoverCard(r, ctx, pos) {
+    const range = r.range || ctx.op || ctx.word || { from: pos, to: pos };
+    return {
+      pos: range.from,
+      end: range.to,
+      above: true,
+      create: () => {
+        const dom = h('div.hover-card',
+          r.title ? h('div.hover-title', r.code === false ? r.title : h('code', r.title)) : null,
+          r.subtitle ? h('div.hover-sub', r.subtitle) : null,
+          r.body ? h('div.hover-body', r.body) : null,
+          r.example ? h('pre.hover-example', r.example) : null,
+          r.note ? h('div.hover-body.hover-note', r.note) : null,
+          r.more ? h('button.hover-more', { on: { mousedown: (e) => { e.preventDefault(); r.more.run(); } } }, r.more.label) : null);
+        return { dom };
+      },
+    };
   }
 
   // ---------- suggestions ----------

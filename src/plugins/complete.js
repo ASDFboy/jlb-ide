@@ -101,10 +101,12 @@ export default {
           seen.add(f.name);
           options.push({ label: f.name, type: 'function', detail: `(${f.params.join(', ')})`, info: f.doc || undefined, boost: 1 });
         }
+        const notes = new Map();
+        for (const n of info.notes) if (n.ref && !notes.has(n.ref.name)) notes.set(n.ref.name, n.doc);
         for (const name of info.defined) {
           if (seen.has(name) || name === typed) continue;
           seen.add(name);
-          options.push({ label: name, type: 'variable', boost: 1 });
+          options.push({ label: name, type: 'variable', info: notes.get(name), boost: 1 });
         }
         // Names from files brought in with IMPORT (and the files that IMPORT this one).
         const link = peek(api.workspace.active?.path);
@@ -113,7 +115,7 @@ export default {
           seen.add(d.name);
           options.push(d.kind === 'func'
             ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 1 }
-            : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: `From ${basename(d.path)}`, boost: 1 });
+            : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 1 });
         }
       }
       return { from, options };

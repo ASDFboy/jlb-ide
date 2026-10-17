@@ -7,7 +7,7 @@
 // Open tabs are read with their unsaved changes; other files are read from disk and
 // kept until they change.
 
-import { scan, loadName } from './scan.js';
+import { scan, loadName, bindingOf } from './scan.js';
 import { dirname, same, basename } from '../core/paths.js';
 
 const files = new Map(); // key -> { path, text, info, stamp }
@@ -88,7 +88,8 @@ function ownNames(path, info) {
   for (const [name, off] of info.globals) {
     const fn = info.funcs.find((f) => f.name === name && (f.inFunc < 0 || f.global));
     const at = fn ? { line: fn.line, col: fn.nameCol || fn.col } : info.at(off);
-    out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params, doc: fn?.doc });
+    const n = fn ? null : info.notes.find((x) => x.ref?.name === name && bindingOf(info, x.ref) === 'global');
+    out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params, doc: fn ? fn.doc : n?.doc, noteKind: n?.kind });
   }
   return out;
 }

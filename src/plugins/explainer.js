@@ -1,7 +1,7 @@
 // Quirk explainer: rest the mouse on an operator, command or keyword for a
 // plain-English explanation, focused on what's different in .jlb.
 
-import { scan } from './scan.js';
+import { scan, noteAt } from './scan.js';
 import { peek, describe } from './linked.js';
 import { basename } from '../core/paths.js';
 
@@ -62,13 +62,20 @@ export default {
         if (owner) {
           // tool.name, for a table made by LOAD.
           const d = link?.loads.get(owner)?.names?.get(w);
-          return d?.kind === 'func' ? funcHover(w, d.params, `From ${describe(d)}`, d.doc) : null;
+          if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`, d.doc);
+          if (d?.doc) return noteHover(`${owner}.${w}`, d.noteKind, `From ${describe(d)}`, d.doc);
+          const e = own.entryNotes.get(`${owner}.${w}`);
+          return e ? noteHover(`${owner}.${w}`, e.kind, `Given a value on line ${e.line}`, e.doc) : null;
         }
         const f = own.funcs.find((x) => x.name === w);
         if (f) return funcHover(w, f.params, `Defined on line ${f.line}`, f.doc);
+        const outside = link ? new Set([...link.names.keys(), ...link.outer.keys()]) : undefined;
+        const n = noteAt(own, word.from, outside);
+        if (n) return noteHover(w, n.kind, `Given a value on line ${n.line}`, n.doc);
         if (own.globals.has(w)) return null;
         const d = link?.names.get(w) || link?.outer.get(w);
         if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`, d.doc);
+        if (d?.doc) return noteHover(w, d.noteKind, `From ${describe(d)}`, d.doc);
         const load = link?.loads.get(w);
         if (load && (own.loads.has(w) || d?.kind === 'load')) {
           const names = load.names ? [...load.names.values()] : null;
@@ -95,6 +102,12 @@ function funcHover(name, params, subtitle, doc) {
     subtitle,
     body: doc || (shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).'),
   };
+}
+
+/** A variable's, constant's or table's hover: the comment at the end of the line where it gets its value. */
+function noteHover(name, kind, subtitle, doc) {
+  const what = { constant: 'CONST ', table: 'Table ', entry: 'Entry ' }[kind] || '';
+  return { title: what + name, subtitle, body: doc, fallback: true };
 }
 
 /** "a, b and 3 more" */
