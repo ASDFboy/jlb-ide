@@ -192,7 +192,7 @@ export const OPERATORS = {
   '!~': ['XNOR', 'True if both sides match.'],
   '!': ['NOT', 'Flips TRUE and FALSE, using the truth rules.'],
   '=': ['Assign (copy)', 'Copies the value. Tables are fully copied (cheaply, copy-on-write), so changing the copy never changes the original. Use @= to share instead. Writing = inside a condition is an error; use ==.'],
-  '@=': ['Assign (share)', 'Both names point at the same table or text, so a change through one shows in the other. For numbers, TRUE/FALSE and NULL it acts like =.'],
+  '@=': ['Assign (share)', 'Both names become the same variable, whatever it holds (tables, text, numbers, TRUE/FALSE ...), so a change through one shows in the other.'],
   '@': ['Share', 'In DEF f(@p) or FOR @x IN t, works on the real value instead of a copy.'],
   '+=': ['Add to', 'x += v is x = x + v, with the same rules: joins text, adds to tables.'],
   '-=': ['Subtract from', 'x -= v is x = x - v.'],
