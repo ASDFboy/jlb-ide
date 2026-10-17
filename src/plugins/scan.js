@@ -69,6 +69,30 @@ export function commentAt(text, i) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n') || null;
 }
 
+/**
+ * The comment at the end of the line that `off` is on (`x = 1 >> what x is`), as plain
+ * text, or null. `noComments` is `text` with its comments blanked (see strip).
+ */
+export function lineComment(text, noComments, off) {
+  let end = text.indexOf('\n', off);
+  if (end < 0) end = text.length;
+  for (let i = off; i < end; i++) {
+    if (text[i] === '>' && text[i + 1] === '>' && noComments[i] !== '>') {
+      if (text.startsWith('>>>', i)) return commentAt(text, i);
+      return text.slice(i + 2, end).trim() || null;
+    }
+  }
+  return null;
+}
+
+/** The note (end-of-line comment) for the name at `off`, where that name was given a value. */
+export function noteAt(info, off, outside) {
+  const r = info.refs.find((x) => x.off === off);
+  if (!r) return null;
+  const key = bindingOf(info, r, outside);
+  return info.notes.find((n) => n.ref?.name === r.name && bindingOf(info, n.ref, outside) === key) || null;
+}
+
 /** The name LOAD gives a file's table: "My-Tools.jlb" → my_tools. */
 export function loadName(file) {
   // Like the interpreter: the file name without its extension, lowercase, - and space as _.
@@ -82,6 +106,7 @@ export function loadName(file) {
  * so `outside` lists the names that come from other files.
  */
 export function bindingOf(info, r, outside) {
+  if (!r) return null;
   if (r.block != null) return 'block:' + r.block;
   if (r.func < 0 || r.global) return 'global';
   const f = info.funcs[r.func];
@@ -138,6 +163,35 @@ export function scan(text) {
   const labels = [];
   const entries = [];
   const consts = []; // CONST names: { name, off, func }
+  // Comments at the end of the line where a name (notes) or a table entry (entryNotes,
+  // "table.name") is given a value, shown when hovering it: { ref, doc, kind, line }.
+  const notes = [];
+  const entryNotes = new Map();
+  const note = (off, kind) => {
+    const doc = lineComment(text, noComments, off);
+    if (doc) notes.push({ ref: refs.at(-1), doc, kind, line: where(off).line });
+  };
+  const entryNote = (owner, name, off, kind) => {
+    const key = owner + '.' + name;
+    if (entryNotes.has(key)) return;
+    const doc = lineComment(text, noComments, off);
+    if (doc) entryNotes.set(key, { doc, kind, line: where(off).line });
+  };
+  let constNext = false;
+  // How many "name:" entries each line has (worked out once, the first time it's needed).
+  let perLine = null;
+  const namedPerLine = () => {
+    if (!perLine) {
+      perLine = new Map();
+      for (let q = 0; q + 1 < toks.length; q++) {
+        if (toks[q + 1].t === ':' && isName(toks[q].t)) {
+          const ln = where(toks[q].off).line;
+          perLine.set(ln, (perLine.get(ln) || 0) + 1);
+        }
+      }
+    }
+    return perLine;
+  };
   const COMMANDS = new Set(['INSERT', 'DROP', 'UNDEFINE']);
   // How the name at toks[k] gets changed, if it does: 'assign' (x = 1, x += 1),
   // 'entry' (x.a = 1, x[2] += 1) or 'command' (INSERT(x, ...), DROP, UNDEFINE).
@@ -299,6 +353,7 @@ export function scan(text) {
     if (t === 'CONST' && isName(next)) {
       // CONST x = ... makes a new name where it is: like LOCAL inside a function.
       consts.push({ name: next, off: toks[k + 1].off, func: globalNext ? -1 : currentFunc() });
+      constNext = true;
       if (!globalNext && currentFunc() >= 0) funcs[currentFunc()].declared.add(next); // meant to be its own
       continue; // x = ... is read next, as usual (GLOBAL still applies to it)
     }
@@ -306,6 +361,7 @@ export function scan(text) {
       if (currentFunc() >= 0) funcs[currentFunc()].declared.add(next);
       giveValue(next, toks[k + 1].off);
       ref(next, toks[k + 1].off);
+      if (ASSIGN.has(toks[k + 2]?.t)) note(toks[k + 1].off, toks[k + 3]?.t === '[' ? 'table' : 'variable');
       k++;
       continue;
     }
@@ -315,6 +371,7 @@ export function scan(text) {
       if (isName(toks[k - 2]?.t) && toks[k - 3]?.t !== '.') {
         addField(toks[k - 2].t, t);
         entries.push({ owner: toks[k - 2].t, name: t, off });
+        if (ASSIGN.has(next)) entryNote(toks[k - 2].t, t, off, toks[k + 2]?.t === '[' ? 'table' : 'entry');
       }
       continue;
     }
@@ -323,8 +380,11 @@ export function scan(text) {
     globalNext = false;
     if (global) ref(t, off, { write: writeAt(k), global });
     else refAt(k);
+    const isConst = constNext;
+    constNext = false;
     if (ASSIGN.has(next)) {
       giveValue(t, off, global);
+      note(off, isConst ? 'constant' : toks[k + 2]?.t === '[' ? 'table' : 'variable');
       // t = [name: 1, other: 2] names its entries.
       if (toks[k + 2]?.t === '[') {
         let d = 0;
@@ -333,7 +393,12 @@ export function scan(text) {
           if (x === '[' || x === '(' || x === '{') d++;
           else if (x === ']' || x === ')' || x === '}') {
             if (--d === 0) break;
-          } else if (d === 1 && isName(x) && toks[j + 1]?.t === ':' && (toks[j - 1].t === '[' || toks[j - 1].t === ',')) addField(t, x);
+          } else if (d === 1 && isName(x) && toks[j + 1]?.t === ':' && (toks[j - 1].t === '[' || toks[j - 1].t === ',')) {
+            addField(t, x);
+            // An entry with a comment at the end of its own line (in a table written over several lines).
+            const ln = where(toks[j].off).line;
+            if (namedPerLine().get(ln) === 1 && ln !== where(off).line) entryNote(t, x, toks[j].off, toks[j + 2]?.t === '[' ? 'table' : 'entry');
+          }
         }
       }
       continue;
@@ -366,6 +431,8 @@ export function scan(text) {
   return {
     funcs,
     consts,
+    notes,
+    entryNotes,
     shadows,
     outsideChanges,
     globals,
