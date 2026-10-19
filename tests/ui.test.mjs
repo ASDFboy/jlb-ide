@@ -197,6 +197,13 @@ test('shows the comment at the end of a variable\'s line on hover', async () => 
   assert.doesNotMatch(await hoverText(11, 'hero'), /what to call/);
 });
 
+test('a name by itself makes a variable, with no warnings', async () => {
+  await setText('save_data\nPRINT(save_data)\nDEF f() {\n    tries\n    GLOBAL best\n    PRINT(tries, best)\n}\nPRINT(best, scroe)\n');
+  const p = await problems();
+  assert.doesNotMatch(p, /save_data|tries|best/);
+  assert.match(p, /scroe/);
+});
+
 test('knows the graphics commands', async () => {
   await setText('WINDOW(200, 100, "Demo", 2)\nWHILE WINDOW_OPEN() {\n    CLEAR_WINDOW("navy")\n    CIRCLE(MOUSE().x, MOUSE().y, 10, "red", [alpha: 128])\n    SHOW()\n}\n');
   assert.match(await hoverText(4, 'CIRCLE'), /CIRCLE\(x, y, radius, color/);

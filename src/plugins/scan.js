@@ -214,6 +214,18 @@ export function scan(text) {
     }
     return moved && (ASSIGN.has(toks[j]?.t) || COMPOUND.has(toks[j]?.t)) ? 'entry' : null;
   };
+  // Whether the name at toks[k] is a whole statement by itself (after GLOBAL, if `global`).
+  const gapBreaks = (a, b) => /\n/.test(code.slice(a, b));
+  const aloneAt = (k, global) => {
+    const first = global ? k - 1 : k;
+    const before = toks[first - 1];
+    const after = toks[k + 1];
+    // After an operator, a comma or an open bracket, the statement carries on onto the next line.
+    const continues = before && /^[^\w"']/.test(before.t) && ![')', ']'].includes(before.t);
+    const startOk = !before || ['{', '}', ';'].includes(before.t) || (!continues && gapBreaks(before.off + before.t.length, toks[first].off));
+    const endOk = !after || ['}', ';'].includes(after.t) || gapBreaks(toks[k].off + toks[k].t.length, after.off);
+    return startOk && endOk;
+  };
   const currentFunc = () => {
     for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].kind === 'func') return scopes[i].func;
     return -1;
@@ -401,6 +413,11 @@ export function scan(text) {
           }
         }
       }
+      continue;
+    }
+    // A name on a line by itself makes that variable (NULL), unless it has a value already.
+    if (aloneAt(k, global)) {
+      giveValue(t, off, global);
       continue;
     }
     // x += 1 reads x first, so x needs a value already.
