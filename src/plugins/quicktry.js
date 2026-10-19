@@ -73,7 +73,16 @@ export default {
         }, 'Stop'));
       }, api.settings.get('slowAfter') * 1000);
       const show = (r) => {
-        if (r.output) entry.insertBefore(h('pre.qt-output', r.output.replace(/\n$/, '')), res);
+        let out = r.output;
+        // CLEAR() sends a form feed: everything shown before it goes, this snippet's
+        // earlier output included.
+        const f = out ? out.lastIndexOf('\f') : -1;
+        if (f >= 0) {
+          for (const el of [...log.children]) if (el !== entry) el.remove();
+          entry.querySelectorAll('.qt-output').forEach((el) => el.remove());
+          out = out.slice(f + 1);
+        }
+        if (out) entry.insertBefore(h('pre.qt-output', out.replace(/\n$/, '')), res);
       };
       try {
         let r = await api.invoke('repl_eval', { interpreter: it.path, cwd: sessionDir(), code });

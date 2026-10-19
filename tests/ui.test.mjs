@@ -119,6 +119,21 @@ test('runs a program and answers INPUT', async () => {
   assert.match(out, /Your guess: 10\nHigher!\nYour guess: 42\nGot it/);
 });
 
+test('CLEAR() wipes the program\'s output so far', async () => {
+  fs.writeFileSync(path.join(proj, 'clear.jlb'), 'PRINT("first")\nPRINT("second")\nCLEAR()\nPRINT("third")\n');
+  await page.click('.tree-row:has-text("guess.jlb")'); // the tree updates with the new file
+  await page.waitForSelector('.tree-row:has-text("clear.jlb")', { timeout: 5000 }).catch(() => page.click('[title*="Refresh"]'));
+  await page.click('.tree-row:has-text("clear.jlb")');
+  await page.waitForSelector('.tab.active:has-text("clear.jlb")');
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.out-line:has-text("Finished")');
+  const out = await page.locator('div.out').innerText();
+  assert.match(out, /Running clear\.jlb[\s\S]*third/);
+  assert.doesNotMatch(out, /first|second/);
+  await page.click('.tree-row:has-text("guess.jlb")');
+  await page.waitForSelector('.tab.active:has-text("guess.jlb")');
+});
+
 test('stops a running program', async () => {
   await page.keyboard.press('F5');
   await page.waitForSelector('.out-line:has-text("Your guess")');
@@ -183,7 +198,7 @@ test('shows the comment at the end of a variable\'s line on hover', async () => 
 });
 
 test('knows the graphics commands', async () => {
-  await setText('WINDOW(200, 100, "Demo", 2)\nWHILE WINDOW_OPEN() {\n    CLEAR("navy")\n    CIRCLE(MOUSE().x, MOUSE().y, 10, "red", [alpha: 128])\n    SHOW()\n}\n');
+  await setText('WINDOW(200, 100, "Demo", 2)\nWHILE WINDOW_OPEN() {\n    CLEAR_WINDOW("navy")\n    CIRCLE(MOUSE().x, MOUSE().y, 10, "red", [alpha: 128])\n    SHOW()\n}\n');
   assert.match(await hoverText(4, 'CIRCLE'), /CIRCLE\(x, y, radius, color/);
   assert.match(await hoverText(1, 'WINDOW'), /bottom-left/);
   assert.doesNotMatch(await problems(), /did you mean|isn't/);
@@ -222,6 +237,11 @@ test('Quick-try shows results and types, and keeps variables', async () => {
   assert.match(log, /"2525"\s*TEXT/);
   assert.match(log, /x \* 2\n10\s*NUMBER/);
   assert.match(log, /can't divide by zero/);
+  // CLEAR() wipes what Quick-try has shown, and the snippet's own output before it.
+  await run('PRINT("gone"); CLEAR(); PRINT("kept")');
+  const after = await page.locator('.qt-log').innerText();
+  assert.match(after, /kept/);
+  assert.doesNotMatch(after, /\ngone|2525|divide/);
 });
 
 test('go to definition jumps to a function', async () => {

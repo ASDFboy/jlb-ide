@@ -14,6 +14,7 @@ export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
 export const BUILTINS = {
   PRINT: ['PRINT(a, b, ...)', 'Prints its inputs separated by spaces, then a new line. Text prints without quotes.'],
   INPUT: ['INPUT([prompt])', 'Shows the prompt, waits for a typed line, and gives it back. It is always text, so use NUM() for numbers.'],
+  CLEAR: ['CLEAR()', 'Wipes everything printed so far: the Output panel in the IDE, or the terminal window. To fill a graphics window with a color, use CLEAR_WINDOW(color).'],
   READ: ['READ(path)', 'The whole file as text.'],
   READ_LINES: ['READ_LINES(path)', 'A table with one item per line of the file.'],
   WRITE: ['WRITE(path, value)', "Replaces the file's contents, creating the file if it doesn't exist."],
@@ -81,7 +82,7 @@ export const GRAPHICS = {
   STYLE: ['STYLE([options])', 'Options for every later drawing command (a call\'s own options win). STYLE() gives the current style back as a table.'],
   RESET_STYLE: ['RESET_STYLE()', 'Clears the style.'],
   RGB: ['RGB(red, green, blue, [alpha])', 'A color number from amounts 0 to 255. alpha 255 is solid, 0 invisible.'],
-  CLEAR: ['CLEAR([color])', 'Fills the whole window (or image) with one color, black if none.'],
+  CLEAR_WINDOW: ['CLEAR_WINDOW([color])', 'Fills the whole window (or image) with one color, black if none. (CLEAR() wipes the printed output instead.)'],
   PIXEL: ['PIXEL(x, y, color)', 'Colors one pixel.'],
   GET_PIXEL: ['GET_PIXEL(x, y)', 'The color there as a number (like 0xFF0000), or NULL outside the picture.'],
   LINE: ['LINE(x1, y1, x2, y2, color, [width], [options])', 'A straight line between two points.'],
