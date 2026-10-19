@@ -194,7 +194,8 @@ export class Runner {
     }
     if (s.get('run.clearOutput')) this.clearOutput();
     if (s.get('run.showOutput')) this.ide.layout.showPanel('output', { focus: false });
-    this.system(`${debug ? 'Debugging' : 'Running'} ${doc.name} with ${it.name}`);
+    this.heading = `${debug ? 'Debugging' : 'Running'} ${doc.name} with ${it.name}`;
+    this.system(this.heading);
     if (note) this.system(note);
     let id;
     try {
@@ -227,13 +228,21 @@ export class Runner {
   }
 
   onOutput(payload) {
-    const { id, stream, text } = payload;
+    const { id, stream } = payload;
+    let { text } = payload;
     const r = this.run_;
     if (!r || r.id !== id) {
       if (!r || id > r.id) this.early.push({ kind: 'out', payload });
       return;
     }
     if (stream === 'out') {
+      // CLEAR() in the program sends a form feed: what was printed before it goes.
+      const f = text.lastIndexOf('\f');
+      if (f >= 0) {
+        this.clearOutput();
+        this.system(this.heading);
+        text = text.slice(f + 1);
+      }
       this.queueOut(text);
     } else {
       // Error output arrives in pieces; the crash report's JSON line is for the IDE, not the person.
