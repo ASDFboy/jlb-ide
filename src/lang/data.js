@@ -19,6 +19,7 @@ export const BUILTINS = {
   READ_LINES: ['READ_LINES(path)', 'A table with one item per line of the file.'],
   WRITE: ['WRITE(path, value)', "Replaces the file's contents, creating the file if it doesn't exist."],
   EXISTS: ['EXISTS(path)', 'TRUE if the file or folder exists.'],
+  DELETE: ['DELETE(path)', 'Removes the file for good (it doesn\'t go to the Recycle Bin). An error if there\'s no such file; folders aren\'t removed.'],
   NUM: ['NUM(x)', 'Converts to a number: NUM("25") is 25, NUM("0xFF") is 255, NUM(TRUE) is 1, NUM(NULL) is 0. Text that is not a number is an error.'],
   STR: ['STR(x)', 'The value as text, written the way PRINT shows it.'],
   ENG: ['ENG(n)', 'Engineering notation: ENG(1500) is "1.5e3".'],
