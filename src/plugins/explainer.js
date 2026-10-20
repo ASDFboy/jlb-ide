@@ -1,7 +1,7 @@
 // Quirk explainer: rest the mouse on an operator, command or keyword for a
 // plain-English explanation, focused on what's different in .jlb.
 
-import { scan, noteAt, typeAt, TYPE_WORDS } from './scan.js';
+import { scan, noteAt, typeAt, TYPE_WORDS, WORD_ALIASES, showParams } from './scan.js';
 import { peek, describe } from './linked.js';
 import { basename } from '../core/paths.js';
 
@@ -45,6 +45,12 @@ export default {
       if (!word || inComment || insideString(before)) return null;
       const w = word.text;
       if (/^[A-Z_]+$/.test(w)) {
+        // AND, OR ...: the same as &&, || ...
+        const sym = WORD_ALIASES[w];
+        if (sym && OPERATORS[sym] && api.settings.get('operators')) {
+          const o = OPERATORS[sym];
+          return { title: w, subtitle: `${o[0]}: the same as ${sym}`, body: o[1], more: more(DOC_FOR_OP(sym)) };
+        }
         // NUMBER score, TEXT name ...: a type before a variable (TEXT( is the drawing command).
         if (TYPE_WORDS.has(w) && /^\s+[a-z_]/.test(line.text.slice(word.to - line.from)) && typeHelp && api.settings.get('keywords')) {
           return { title: `${w} name`, body: typeHelp(w), more: more('values', 'typed-variables') };
@@ -66,13 +72,13 @@ export default {
         if (owner) {
           // tool.name, for a table made by LOAD.
           const d = link?.loads.get(owner)?.names?.get(w);
-          if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`, d.doc);
+          if (d?.kind === 'func') return funcHover(w, d.params, d.types, `From ${describe(d)}`, d.doc);
           if (d?.doc) return noteHover(`${owner}.${w}`, d.noteKind, `From ${describe(d)}`, d.doc);
           const e = own.entryNotes.get(`${owner}.${w}`);
           return e ? noteHover(`${owner}.${w}`, e.kind, `Given a value on line ${e.line}`, e.doc) : null;
         }
         const f = own.funcs.find((x) => x.name === w);
-        if (f) return funcHover(w, f.params, `Defined on line ${f.line}`, f.doc);
+        if (f) return funcHover(w, f.params, f.types, `Defined on line ${f.line}`, f.doc);
         const outside = link ? new Set([...link.names.keys(), ...link.outer.keys()]) : undefined;
         const n = noteAt(own, word.from, outside);
         const ty = typeAt(own, word.from, outside);
@@ -80,7 +86,7 @@ export default {
         if (n) return noteHover(w, n.kind, `Given a value on line ${n.line}`, n.doc);
         if (own.globals.has(w)) return null;
         const d = link?.names.get(w) || link?.outer.get(w);
-        if (d?.kind === 'func') return funcHover(w, d.params, `From ${describe(d)}`, d.doc);
+        if (d?.kind === 'func') return funcHover(w, d.params, d.types, `From ${describe(d)}`, d.doc);
         if (d?.doc) return noteHover(w, d.noteKind, `From ${describe(d)}`, d.doc);
         const load = link?.loads.get(w);
         if (load && (own.loads.has(w) || d?.kind === 'load')) {
@@ -101,10 +107,10 @@ export default {
 };
 
 /** A function's hover: the comment at the top of its body, or else how its inputs work. */
-function funcHover(name, params, subtitle, doc) {
+function funcHover(name, params, types, subtitle, doc) {
   const shared = params.filter((p) => p.startsWith('@'));
   return {
-    title: `DEF ${name}(${params.join(', ')})`,
+    title: `DEF ${name}(${showParams(params, types)})`,
     subtitle,
     body: doc || (shared.length ? `${shared.map((p) => p.slice(1)).join(' and ')} ${shared.length > 1 ? 'are' : 'is'} shared (@), so changes inside the function change what you pass in. Other inputs are copies.` : 'Inputs are copies, so the function can\'t change what you pass in (mark an input with @ to share it).'),
   };

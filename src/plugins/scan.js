@@ -4,7 +4,9 @@
 const TOKEN = /[A-Za-z_][A-Za-z0-9_]*|\d[\w.]*|!===|===|!==|==|!\^=|!%=|@=|[-+*/^%]=|\.\.\.|\S/g;
 const ASSIGN = new Set(['=', '@=']);
 /** The types a variable can be declared with: NUMBER score = 0. STRING means TEXT. */
-export const TYPE_WORDS = new Set(['NUMBER', 'TEXT', 'STRING', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'IMAGE', 'WINDOW', 'FONT']);
+export const TYPE_WORDS = new Set(['NUMBER', 'TEXT', 'STRING', 'STR', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'IMAGE', 'WINDOW', 'FONT']);
+/** Words that mean the same as another word or an operator. */
+export const WORD_ALIASES = { FUNC: 'DEF', RTRN: 'RETURN', AND: '&&', OR: '||', NAND: '!&&', NOR: '!||', XOR: '~', XNOR: '!~' };
 const COMPOUND = new Set(['+=', '-=', '*=', '/=', '^=', '!^=', '%=', '!%=']);
 
 /** Text with comments removed and (for `code`) strings blanked, keeping every position. */
@@ -87,6 +89,11 @@ export function lineComment(text, noComments, off) {
   return null;
 }
 
+/** A function's inputs as written: "TEXT file, NUMBER @lives, times". */
+export function showParams(params, types) {
+  return params.map((p, i) => (types?.[i] ? `${types[i]} ${p}` : p)).join(', ');
+}
+
 /** The type the name at `off` was declared with (NUMBER score), if any. */
 export function typeAt(info, off, outside) {
   const r = info.refs.find((x) => x.off === off);
@@ -141,13 +148,17 @@ export function scan(text) {
     return { line: lo + 1, col: off - starts[lo] + 1 };
   };
   // FUNC is the older name for DEF.
-  const all = [...code.matchAll(TOKEN)].map((m) => ({ t: m[0] === 'FUNC' ? 'DEF' : m[0], off: m.index }));
+  // FUNC and RTRN are other names for DEF and RETURN; AND, OR ... are the logic operators.
+  const all = [...code.matchAll(TOKEN)].map((m) => ({ t: WORD_ALIASES[m[0]] || m[0], off: m.index }));
   const isName = (t) => /^[a-z_][a-z0-9_]*$/.test(t || '');
   // NUMBER score = 0: the type is noted (by where the name is) and the rest reads as usual.
   const typedAt = new Map();
   const toks = all.filter((tk, i) => {
-    if (!TYPE_WORDS.has(tk.t) || !isName(all[i + 1]?.t)) return true;
-    typedAt.set(all[i + 1].off, tk.t === 'STRING' ? 'TEXT' : tk.t);
+    if (!TYPE_WORDS.has(tk.t)) return true;
+    // NUMBER n, or (for a function's input) NUMBER @n.
+    const name = isName(all[i + 1]?.t) ? all[i + 1] : all[i + 1]?.t === '@' && isName(all[i + 2]?.t) ? all[i + 2] : null;
+    if (!name) return true;
+    typedAt.set(name.off, tk.t === 'STRING' || tk.t === 'STR' ? 'TEXT' : tk.t);
     return false;
   });
 
@@ -313,7 +324,7 @@ export function scan(text) {
       const global = globalNext || (toks[j]?.t === 'GLOBAL' && isName(toks[j + 1]?.t));
       if (toks[j]?.t === 'GLOBAL') j++;
       globalNext = false;
-      const fn = { name, params: [], locals: new Set(), declared: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc(), global };
+      const fn = { name, params: [], types: [], locals: new Set(), declared: new Set(), line: where(off).line, col: where(off).col, nameCol: null, inFunc: currentFunc(), global };
       funcs.push(fn);
       if (isName(toks[j]?.t)) {
         fn.name = name = toks[j].t;
@@ -340,6 +351,7 @@ export function scan(text) {
             fn.declared.add(x);
             refs.push({ name: x, off: toks[j].off, func: index, block: null });
             fn.params.push(toks[j - 1]?.t === '@' ? '@' + x : toks[j - 1]?.t === '...' ? '...' + x : x);
+            fn.types.push(typedAt.get(toks[j].off) || null);
             start = false;
           }
         }

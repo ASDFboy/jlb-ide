@@ -2,7 +2,7 @@
 
 import { h, clear, icon, toast, choose, prompt, confirm, contextMenu } from './ui.js';
 import { invoke, pickOpen, pickSave } from './backend.js';
-import { basename, dirname, join, same, relative } from './paths.js';
+import { basename, dirname, join, same, relative, normalize } from './paths.js';
 
 let nextId = 1;
 
@@ -140,6 +140,7 @@ export class Workspace {
   }
 
   async openFile(path, { activate = true } = {}) {
+    path = normalize(path);
     const existing = this.find(path);
     if (existing) {
       if (activate) this.activate(existing);

@@ -89,7 +89,7 @@ function ownNames(path, info) {
     const fn = info.funcs.find((f) => f.name === name && (f.inFunc < 0 || f.global));
     const at = fn ? { line: fn.line, col: fn.nameCol || fn.col } : info.at(off);
     const n = fn ? null : info.notes.find((x) => x.ref?.name === name && bindingOf(info, x.ref) === 'global');
-    out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params, doc: fn ? fn.doc : n?.doc, noteKind: n?.kind });
+    out.set(name, { name, path, line: at.line, col: at.col, kind: fn ? 'func' : 'value', params: fn?.params, types: fn?.types, doc: fn ? fn.doc : n?.doc, noteKind: n?.kind });
   }
   return out;
 }

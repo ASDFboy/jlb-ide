@@ -1,6 +1,8 @@
 // Crash report viewer: when a program stops with an error, shows the message,
 // the chain of function calls and every variable's value, and marks the line.
 
+import { normalize } from '../core/paths.js';
+
 export default {
   id: 'crash',
   name: 'Crash report viewer',
@@ -48,7 +50,7 @@ export default {
       const view = api.editor.view;
       const doc = api.workspace.active;
       let deco = Decoration.none;
-      if (last && api.settings.get('markLine') && sameFile(last, doc) && last.report.line <= view.state.doc.lines) {
+      if (last && !last.edited && api.settings.get('markLine') && sameFile(last, doc) && last.report.line <= view.state.doc.lines) {
         const line = view.state.doc.line(last.report.line);
         deco = Decoration.set([
           Decoration.line({ class: 'cm-crash-line' }).range(line.from),
@@ -58,7 +60,7 @@ export default {
       view.dispatch({ effects: setMark.of(deco) });
     };
     // Where the crash happened: the program itself, or a file it brought in with IMPORT or LOAD.
-    const norm = (p) => (p || '').replace(/\\/g, '/').replace(/^([a-z]):/i, (m, d) => d.toLowerCase() + ':');
+    const norm = (p) => normalize(p || '').replace(/\\/g, '/').replace(/^([a-z]):/i, (m, d) => d.toLowerCase() + ':');
     const crashPath = (c) => c.report.path || (c.doc?.path ? c.doc.path.replace(/[^\\/]*$/, '') + c.report.file : null);
     const sameFile = (c, doc) => {
       if (!doc) return false;
@@ -85,6 +87,12 @@ export default {
       api.editor.view.dispatch({ effects: setMark.of(Decoration.none) });
     });
     api.events.on('active-change', () => setTimeout(mark));
+    // Once the file that crashed is changed, the mark is gone for good (until the next crash).
+    const edited = (doc) => {
+      if (last && !last.edited && sameFile(last, doc)) last.edited = true;
+    };
+    api.events.on('editor-change', () => edited(api.workspace.active));
+    api.events.on('doc-change', edited);
     api.settings.onChange('markLine', mark);
     api.onDispose(() => api.editor.view.dispatch({ effects: setMark.of(Decoration.none) }));
 

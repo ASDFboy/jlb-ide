@@ -29,9 +29,27 @@ export function relative(folder, p) {
   return p;
 }
 
+/**
+ * The same path written plainly: "." and ".." steps worked out ("C:\\a\\.\\lib\\..\\b.jlb" is
+ * "C:\\a\\b.jlb"), repeated separators joined, and no separator at the end.
+ */
+export function normalize(p) {
+  if (!p) return p;
+  const s = sep(p);
+  const unc = /^[\\/]{2}[^\\/]/.test(p); // \\server\share
+  const root = unc ? s + s : /^[a-z]:[\\/]/i.test(p) ? p.slice(0, 3) : /^[\\/]/.test(p) ? s : '';
+  const out = [];
+  for (const part of p.slice(root.length).split(/[\\/]+/)) {
+    if (!part || part === '.') continue;
+    if (part === '..' && out.length && out.at(-1) !== '..') out.pop();
+    else if (part !== '..' || !root) out.push(part);
+  }
+  return root + out.join(s);
+}
+
 export function same(a, b) {
   if (!a || !b) return false;
-  const norm = (x) => x.replace(/\\/g, '/').replace(/\/+$/, '');
+  const norm = (x) => normalize(x).replace(/\\/g, '/');
   // Windows paths aren't case-sensitive.
   return /^[a-z]:/i.test(a) ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
 }

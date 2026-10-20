@@ -3,7 +3,7 @@
 import { snippetCompletion } from '@codemirror/autocomplete';
 import { StateField } from '@codemirror/state';
 import { showTooltip } from '@codemirror/view';
-import { scan } from './scan.js';
+import { scan, showParams } from './scan.js';
 import { peek } from './linked.js';
 import { basename } from '../core/paths.js';
 
@@ -58,7 +58,7 @@ export default {
           for (const d of load.names.values()) {
             fromLoad.add(d.name);
             options.push(d.kind === 'func'
-              ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 2, apply: callApply(d.name) }
+              ? { label: d.name, type: 'function', detail: `(${showParams(d.params, d.types)})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 2, apply: callApply(d.name) }
               : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: `From ${basename(d.path)}`, boost: 2 });
           }
         }
@@ -99,7 +99,7 @@ export default {
         for (const f of info.funcs) {
           if (!f.name || seen.has(f.name)) continue;
           seen.add(f.name);
-          options.push({ label: f.name, type: 'function', detail: `(${f.params.join(', ')})`, info: f.doc || undefined, boost: 1 });
+          options.push({ label: f.name, type: 'function', detail: `(${showParams(f.params, f.types)})`, info: f.doc || undefined, boost: 1 });
         }
         const notes = new Map();
         for (const n of info.notes) if (n.ref && !notes.has(n.ref.name)) notes.set(n.ref.name, n.doc);
@@ -114,7 +114,7 @@ export default {
           if (seen.has(d.name) || d.name === typed) continue;
           seen.add(d.name);
           options.push(d.kind === 'func'
-            ? { label: d.name, type: 'function', detail: `(${d.params.join(', ')})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 1 }
+            ? { label: d.name, type: 'function', detail: `(${showParams(d.params, d.types)})`, info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 1 }
             : { label: d.name, type: d.kind === 'load' ? 'namespace' : 'variable', info: d.doc ? `${d.doc}\n\nFrom ${basename(d.path)}` : `From ${basename(d.path)}`, boost: 1 });
         }
       }

@@ -6,6 +6,7 @@ export const KEYWORDS = [
   'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
   'DEF', 'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
   'CONST', 'START', 'GLOBAL', 'NUMBER', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'STRING',
+  'RTRN', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR',
 ];
 
 export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
@@ -131,7 +132,7 @@ Object.assign(BUILTINS, GRAPHICS);
 /** Keywords explained, for hovers. */
 /** Help for a type word before a variable's name (NUMBER score = 0). */
 export const TYPE_HELP = {
-  NUMBER: 'numbers', TEXT: 'text', STRING: 'text (STRING is another name for TEXT)', BOOL: 'TRUE or FALSE', TABLE: 'tables',
+  NUMBER: 'numbers', TEXT: 'text', STRING: 'text (STRING is another name for TEXT)', STR: 'text (STR is another name for TEXT here; STR(x) still turns x into text)', BOOL: 'TRUE or FALSE', TABLE: 'tables',
   FUNCTION: 'functions', TASK: 'tasks (from START)', IMAGE: 'images', WINDOW: 'windows', FONT: 'fonts',
 };
 function typeHelpFor(t) {
@@ -162,6 +163,7 @@ export const KEYWORD_HELP = {
   FUNCTION: typeHelpFor('FUNCTION'),
   TASK: typeHelpFor('TASK'),
   STRING: typeHelpFor('STRING'),
+  RTRN: 'Short for RETURN: leaves the function and gives back a value.',
   GLOBAL: 'Inside a function, names given a value are its own. GLOBAL before the name gives the value to the file\'s outside name instead: GLOBAL score += 1, GLOBAL DEF helper() { }, GLOBAL CONST max = 10. Outside names can always be read, and their table entries changed, without it.',
   TRY: 'Runs a block; if an error happens, the FAIL block runs instead of crashing.',
   FAIL: 'FAIL err { } runs when the TRY block errors. err.message, err.line and err.file tell you what happened.',

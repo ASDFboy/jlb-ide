@@ -1,7 +1,7 @@
 // Getting around: go to a definition (F12 or Ctrl+click), also in files brought in
 // with IMPORT and LOAD; the Outline of functions, POINTs and imports; and Go to line.
 
-import { scan, loadName } from './scan.js';
+import { scan, loadName, showParams } from './scan.js';
 import { linked, peek, resolvePath } from './linked.js';
 import { same } from '../core/paths.js';
 
@@ -125,7 +125,7 @@ export default {
           // Clicking opens the file it brings in.
           open: doc.path && !missing.has(imp.off) ? resolvePath(doc.path, imp.file) : null,
         })),
-        ...info.funcs.filter((f) => f.name).map((f) => ({ kind: 'DEF', label: `${f.name}(${f.params.join(', ')})`, line: f.line, col: f.nameCol || f.col })),
+        ...info.funcs.filter((f) => f.name).map((f) => ({ kind: 'DEF', label: `${f.name}(${showParams(f.params, f.types)})`, line: f.line, col: f.nameCol || f.col })),
         ...[...info.points].map(([name, p]) => ({ kind: 'POINT', label: name, line: p.line, col: p.col })),
       ].sort((a, b) => a.line - b.line);
       if (!items.length) {
