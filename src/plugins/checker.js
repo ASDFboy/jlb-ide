@@ -163,15 +163,17 @@ function fixFor(message) {
 // `x !== NULL && x.hp` checks both sides, so x.hp runs (and crashes) when x is NULL.
 function andOrCrashes({ codeLines: lines }) {
   const out = [];
-  const re = /\b([a-z_][a-z0-9_]*)\s*(!==|!===|==|===)\s*NULL\s*(&&|\|\|)\s*\1\s*[.[]/g;
+  // AND and OR are the same as && and ||.
+  const re = /\b([a-z_][a-z0-9_]*)\s*(!==|!===|==|===)\s*NULL\s*(&&|\|\||\bAND\b|\bOR\b)\s*\1\s*[.[]/g;
   lines.forEach((code, i) => {
     for (const m of code.matchAll(re)) {
-      const safeWith = m[3] === '&&' ? '&' : '|';
-      const fitsOp = (m[2].startsWith('!') && m[3] === '&&') || (!m[2].startsWith('!') && m[3] === '||');
+      const and = m[3] === '&&' || m[3] === 'AND';
+      const safeWith = and ? '&' : '|';
+      const fitsOp = (m[2].startsWith('!') && and) || (!m[2].startsWith('!') && !and);
       if (!fitsOp) continue;
       const col = m.index + m[0].indexOf(m[3], m[1].length + m[2].length) + 1;
       out.push({
-        line: i + 1, col, endCol: col + 2, severity: 'warning',
+        line: i + 1, col, endCol: col + m[3].length, severity: 'warning',
         message: `${m[3]} always checks both sides, so the part after it still runs when ${m[1]} is NULL, and crashes. Use ${safeWith} to stop early.`,
         fix: { label: `Change to ${safeWith}`, text: safeWith },
       });

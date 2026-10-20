@@ -159,6 +159,31 @@ test('shows a crash report and marks the line', async () => {
   assert.match(await hoverText(2, 'size'), /size = 12/);
 });
 
+test('a crash goes to the open tab of its file, and editing clears the mark', async () => {
+  fs.mkdirSync(path.join(proj, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'boom.jlb'), 'DEF boom(n) {\n    RETURN n / 0\n}\n');
+  fs.writeFileSync(path.join(proj, 'usesboom.jlb'), 'IMPORT "./lib/../boom.jlb"\nboom(1)\n');
+  const open = (f) => page.evaluate((p) => window.jlbIde.workspace.openFile(p), path.join(proj, f));
+  const tabs = () => page.evaluate(() => window.jlbIde.workspace.docs.filter((d) => d.path?.endsWith('boom.jlb')).length);
+  await open('boom.jlb');
+  await open('usesboom.jlb');
+  await page.keyboard.press('F5');
+  await page.waitForSelector('.tab.active:has-text("boom.jlb"):not(:has-text("usesboom"))');
+  await page.waitForSelector('.crash-note');
+  assert.equal(await tabs(), 2); // boom.jlb and usesboom.jlb: no second boom.jlb
+  // Typing in the file that crashed removes the mark, and it stays gone.
+  await page.click('.cm-content');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('x');
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('.crash-note').count(), 0);
+  await open('usesboom.jlb');
+  await open('boom.jlb');
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('.crash-note, .cm-crash-line').count(), 0);
+  await page.keyboard.press('Backspace');
+});
+
 test('checks syntax as you type, with fixes', async () => {
   await page.keyboard.press('Control+n');
   await setText('x = 5\nIF x != 3 {\n    PRINT(x)\n}\n');
@@ -211,6 +236,18 @@ test('typed variables: no false warnings, and hovers say the type', async () => 
   assert.match(await hoverText(4, 'name'), /TEXT name[\s\S]*who is playing/);
   assert.match(await hoverText(1, 'NUMBER'), /only holds numbers/);
   assert.match(await hoverText(2, 'TEXT'), /only holds text/);
+});
+
+test('typed inputs, STR, RTRN and AND/OR words', async () => {
+  await setText('DEF save(TEXT save_file, TABLE data) {\n    save_file += ".txt"\n    RTRN data\n}\nSTR who = "Ann"\nx = NULL\nIF x !== NULL AND x.hp > 0 { }\nPRINT(save("a", [1]), who, TRUE OR\n    FALSE)\n');
+  const p = await problems();
+  assert.doesNotMatch(p, /save_file|data|who|isn't|expected/);
+  assert.match(p, /AND always checks both sides/);
+  assert.match(await hoverText(8, 'save'), /DEF save\(TEXT save_file, TABLE data\)/);
+  assert.match(await hoverText(2, 'save_file'), /TEXT save_file/);
+  assert.match(await hoverText(5, 'who'), /TEXT who/);
+  assert.match(await hoverText(7, 'AND'), /the same as &&/);
+  assert.match(await hoverText(3, 'RTRN'), /Short for RETURN/);
 });
 
 test('knows the graphics commands', async () => {
