@@ -204,6 +204,15 @@ test('a name by itself makes a variable, with no warnings', async () => {
   assert.match(p, /scroe/);
 });
 
+test('typed variables: no false warnings, and hovers say the type', async () => {
+  await setText('NUMBER score\nTEXT name = "Ann" >> who is playing\nCONST NUMBER max_hp = 100\nPRINT(score, name, max_hp)\n');
+  assert.doesNotMatch(await problems(), /score|name|max_hp/);
+  assert.match(await hoverText(4, 'score'), /NUMBER score[\s\S]*Only holds numbers/);
+  assert.match(await hoverText(4, 'name'), /TEXT name[\s\S]*who is playing/);
+  assert.match(await hoverText(1, 'NUMBER'), /only holds numbers/);
+  assert.match(await hoverText(2, 'TEXT'), /only holds text/);
+});
+
 test('knows the graphics commands', async () => {
   await setText('WINDOW(200, 100, "Demo", 2)\nWHILE WINDOW_OPEN() {\n    CLEAR_WINDOW("navy")\n    CIRCLE(MOUSE().x, MOUSE().y, 10, "red", [alpha: 128])\n    SHOW()\n}\n');
   assert.match(await hoverText(4, 'CIRCLE'), /CIRCLE\(x, y, radius, color/);

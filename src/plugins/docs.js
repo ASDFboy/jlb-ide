@@ -37,6 +37,7 @@ const ALIASES = {
   errors: ['08-errors.md'],
   tasks: ['11-tasks.md'],
   graphics: ['12-graphics.md'],
+  values: ['03-values-and-types.md'],
 };
 
 const slug = (s) => s.toLowerCase().replace(/<[^>]+>/g, '').replace(/[^\w\- ]/g, '').trim().replace(/ /g, '-');
