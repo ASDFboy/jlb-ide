@@ -3,6 +3,8 @@
 
 const TOKEN = /[A-Za-z_][A-Za-z0-9_]*|\d[\w.]*|!===|===|!==|==|!\^=|!%=|@=|[-+*/^%]=|\.\.\.|\S/g;
 const ASSIGN = new Set(['=', '@=']);
+/** The types a variable can be declared with: NUMBER score = 0. STRING means TEXT. */
+export const TYPE_WORDS = new Set(['NUMBER', 'TEXT', 'STRING', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'IMAGE', 'WINDOW', 'FONT']);
 const COMPOUND = new Set(['+=', '-=', '*=', '/=', '^=', '!^=', '%=', '!%=']);
 
 /** Text with comments removed and (for `code`) strings blanked, keeping every position. */
@@ -85,6 +87,15 @@ export function lineComment(text, noComments, off) {
   return null;
 }
 
+/** The type the name at `off` was declared with (NUMBER score), if any. */
+export function typeAt(info, off, outside) {
+  const r = info.refs.find((x) => x.off === off);
+  if (!r) return null;
+  const key = bindingOf(info, r, outside);
+  const d = info.refs.find((x) => x.name === r.name && info.typedAt.has(x.off) && bindingOf(info, x, outside) === key);
+  return d ? info.typedAt.get(d.off) : null;
+}
+
 /** The note (end-of-line comment) for the name at `off`, where that name was given a value. */
 export function noteAt(info, off, outside) {
   const r = info.refs.find((x) => x.off === off);
@@ -130,8 +141,15 @@ export function scan(text) {
     return { line: lo + 1, col: off - starts[lo] + 1 };
   };
   // FUNC is the older name for DEF.
-  const toks = [...code.matchAll(TOKEN)].map((m) => ({ t: m[0] === 'FUNC' ? 'DEF' : m[0], off: m.index }));
+  const all = [...code.matchAll(TOKEN)].map((m) => ({ t: m[0] === 'FUNC' ? 'DEF' : m[0], off: m.index }));
   const isName = (t) => /^[a-z_][a-z0-9_]*$/.test(t || '');
+  // NUMBER score = 0: the type is noted (by where the name is) and the rest reads as usual.
+  const typedAt = new Map();
+  const toks = all.filter((tk, i) => {
+    if (!TYPE_WORDS.has(tk.t) || !isName(all[i + 1]?.t)) return true;
+    typedAt.set(all[i + 1].off, tk.t === 'STRING' ? 'TEXT' : tk.t);
+    return false;
+  });
 
   const funcs = [];
   const points = new Map();
@@ -450,6 +468,7 @@ export function scan(text) {
     consts,
     notes,
     entryNotes,
+    typedAt,
     shadows,
     outsideChanges,
     globals,

@@ -1,7 +1,7 @@
 // Quirk explainer: rest the mouse on an operator, command or keyword for a
 // plain-English explanation, focused on what's different in .jlb.
 
-import { scan, noteAt } from './scan.js';
+import { scan, noteAt, typeAt, TYPE_WORDS } from './scan.js';
 import { peek, describe } from './linked.js';
 import { basename } from '../core/paths.js';
 
@@ -20,7 +20,7 @@ export default {
     { key: 'numbers', title: 'Show what hex and scientific numbers equal', type: 'boolean', default: true },
   ],
   activate(api) {
-    const { OPERATORS, BUILTINS, KEYWORD_HELP, GRAPHICS = {} } = api.jlb;
+    const { OPERATORS, BUILTINS, KEYWORD_HELP, GRAPHICS = {}, typeHelp } = api.jlb;
     const more = (page, anchor) => {
       const docs = api.use('docs');
       return docs ? { label: 'Read more in the language guide', run: () => docs.show(page, anchor) } : undefined;
@@ -45,6 +45,10 @@ export default {
       if (!word || inComment || insideString(before)) return null;
       const w = word.text;
       if (/^[A-Z_]+$/.test(w)) {
+        // NUMBER score, TEXT name ...: a type before a variable (TEXT( is the drawing command).
+        if (TYPE_WORDS.has(w) && /^\s+[a-z_]/.test(line.text.slice(word.to - line.from)) && typeHelp && api.settings.get('keywords')) {
+          return { title: `${w} name`, body: typeHelp(w), more: more('values', 'typed-variables') };
+        }
         if (BUILTINS[w] && api.settings.get('commands')) return { title: BUILTINS[w][0], body: BUILTINS[w][1], more: more(GRAPHICS[w] ? 'graphics' : 'built-ins') };
         if (KEYWORD_HELP[w] && api.settings.get('keywords')) return { title: w, body: KEYWORD_HELP[w], more: more('control-flow') };
         return null;
@@ -71,6 +75,8 @@ export default {
         if (f) return funcHover(w, f.params, `Defined on line ${f.line}`, f.doc);
         const outside = link ? new Set([...link.names.keys(), ...link.outer.keys()]) : undefined;
         const n = noteAt(own, word.from, outside);
+        const ty = typeAt(own, word.from, outside);
+        if (ty) return { title: `${ty} ${w}`, subtitle: `Only holds ${api.jlb.TYPE_HELP[ty].replace(/ \(.*/, '')} (or NULL)`, body: n?.doc, fallback: true };
         if (n) return noteHover(w, n.kind, `Given a value on line ${n.line}`, n.doc);
         if (own.globals.has(w)) return null;
         const d = link?.names.get(w) || link?.outer.get(w);

@@ -5,7 +5,7 @@
 export const KEYWORDS = [
   'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
   'DEF', 'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
-  'CONST', 'START', 'GLOBAL',
+  'CONST', 'START', 'GLOBAL', 'NUMBER', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'STRING',
 ];
 
 export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
@@ -129,6 +129,16 @@ export const GRAPHICS = {
 Object.assign(BUILTINS, GRAPHICS);
 
 /** Keywords explained, for hovers. */
+/** Help for a type word before a variable's name (NUMBER score = 0). */
+export const TYPE_HELP = {
+  NUMBER: 'numbers', TEXT: 'text', STRING: 'text (STRING is another name for TEXT)', BOOL: 'TRUE or FALSE', TABLE: 'tables',
+  FUNCTION: 'functions', TASK: 'tasks (from START)', IMAGE: 'images', WINDOW: 'windows', FONT: 'fonts',
+};
+function typeHelpFor(t) {
+  return typeHelp(t);
+}
+export const typeHelp = (t) => `Makes a variable that only holds ${TYPE_HELP[t]}, or NULL: giving it anything else is an error, however it's changed (=, +=, or through a name shared with @). Written by itself (${t} name) it starts as NULL.`;
+
 export const KEYWORD_HELP = {
   IF: 'Runs a block when the condition is true. Only TRUE, 1, "TRUE" and "1" count as true; FALSE, 0, NULL, "FALSE" and "0" as false. Anything else is an error.',
   ELIF: 'Another condition, checked when the ones above were false. ELSE IF and ELSEIF mean the same.',
@@ -146,6 +156,12 @@ export const KEYWORD_HELP = {
   DEF: 'Makes a function. Inputs are copies unless marked with @; inputs can have defaults (n = 10), and ...rest collects extras into a table.',
   RETURN: 'Leaves the function and gives back a value. Without RETURN a function gives back NULL.',
   LOCAL: 'A variable that belongs only to this function. Names given a value in a function already are its own, so LOCAL is for making one before it has a value (LOCAL x starts as NULL), or saying so clearly. Only allowed inside functions.',
+  NUMBER: typeHelpFor('NUMBER'),
+  BOOL: typeHelpFor('BOOL'),
+  TABLE: typeHelpFor('TABLE'),
+  FUNCTION: typeHelpFor('FUNCTION'),
+  TASK: typeHelpFor('TASK'),
+  STRING: typeHelpFor('STRING'),
   GLOBAL: 'Inside a function, names given a value are its own. GLOBAL before the name gives the value to the file\'s outside name instead: GLOBAL score += 1, GLOBAL DEF helper() { }, GLOBAL CONST max = 10. Outside names can always be read, and their table entries changed, without it.',
   TRY: 'Runs a block; if an error happens, the FAIL block runs instead of crashing.',
   FAIL: 'FAIL err { } runs when the TRY block errors. err.message, err.line and err.file tell you what happened.',
