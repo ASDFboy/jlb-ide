@@ -239,7 +239,7 @@ test('typed variables: no false warnings, and hovers say the type', async () => 
 });
 
 test('typed inputs, STR, RTRN and AND/OR words', async () => {
-  await setText('DEF save(TEXT save_file, TABLE data) {\n    save_file += ".txt"\n    RTRN data\n}\nSTR who = "Ann"\nx = NULL\nIF x !== NULL AND x.hp > 0 { }\nPRINT(save("a", [1]), who, TRUE OR\n    FALSE)\n');
+  await setText('DEF save(TEXT save_file, TABLE data) {\n    save_file += ".txt"\n    RTRN data\n}\nSTR who = "Ann"\nx = NULL\nIF x !== NULL AND x.hp > 0 { }\nPRINT(save("a", [1]), who, TRUE OR\n    FALSE, NOT who)\n');
   const p = await problems();
   assert.doesNotMatch(p, /save_file|data|who|isn't|expected/);
   assert.match(p, /AND always checks both sides/);
@@ -248,6 +248,7 @@ test('typed inputs, STR, RTRN and AND/OR words', async () => {
   assert.match(await hoverText(5, 'who'), /TEXT who/);
   assert.match(await hoverText(7, 'AND'), /the same as &&/);
   assert.match(await hoverText(3, 'RTRN'), /Short for RETURN/);
+  assert.match(await hoverText(9, 'NOT'), /the same as !/);
 });
 
 test('knows the graphics commands', async () => {

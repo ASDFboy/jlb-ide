@@ -6,7 +6,7 @@ const ASSIGN = new Set(['=', '@=']);
 /** The types a variable can be declared with: NUMBER score = 0. STRING means TEXT. */
 export const TYPE_WORDS = new Set(['NUMBER', 'TEXT', 'STRING', 'STR', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'IMAGE', 'WINDOW', 'FONT']);
 /** Words that mean the same as another word or an operator. */
-export const WORD_ALIASES = { FUNC: 'DEF', RTRN: 'RETURN', AND: '&&', OR: '||', NAND: '!&&', NOR: '!||', XOR: '~', XNOR: '!~' };
+export const WORD_ALIASES = { FUNC: 'DEF', RTRN: 'RETURN', AND: '&&', OR: '||', NAND: '!&&', NOR: '!||', XOR: '~', XNOR: '!~', NOT: '!' };
 const COMPOUND = new Set(['+=', '-=', '*=', '/=', '^=', '!^=', '%=', '!%=']);
 
 /** Text with comments removed and (for `code`) strings blanked, keeping every position. */

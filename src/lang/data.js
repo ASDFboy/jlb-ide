@@ -6,7 +6,7 @@ export const KEYWORDS = [
   'IF', 'ELIF', 'ELSEIF', 'ELSE', 'WHILE', 'REPEAT', 'FOR', 'IN', 'TO', 'STEP', 'BREAK', 'SKIP',
   'DEF', 'FUNC', 'RETURN', 'LOCAL', 'TRY', 'FAIL', 'GOTO', 'POINT', 'IMPORT', 'LOAD', 'END',
   'CONST', 'START', 'GLOBAL', 'NUMBER', 'BOOL', 'TABLE', 'FUNCTION', 'TASK', 'STRING',
-  'RTRN', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR',
+  'RTRN', 'AND', 'OR', 'NAND', 'NOR', 'XOR', 'XNOR', 'NOT',
 ];
 
 export const CONSTANTS = ['TRUE', 'FALSE', 'NULL'];
