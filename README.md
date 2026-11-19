@@ -4,7 +4,7 @@
 
 A code editor made for the [.jlb programming language](https://github.com/ASDFboy/jlb-rust). Write a program, check it, and run it with the Rust or C interpreter, with tools built around the parts of .jlb that are different from other languages.
 
-**Authors:** [ASDFboy](https://github.com/ASDFboy) and Claude
+**Author:** [ASDFboy](https://github.com/ASDFboy)
 
 ![JLB IDE running a program, with an explanation of the & operator](docs/images/main-dark.png)
 
@@ -181,4 +181,4 @@ It talks to the interpreters through their [editor modes](https://github.com/ASD
 
 ## Authors
 
-Made by **ASDFboy** and **Claude**.
+Made by **ASDFboy**.

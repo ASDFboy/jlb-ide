@@ -42,7 +42,7 @@
     },
     "shortDescription": "An IDE for the .jlb programming language",
     "longDescription": "JLB IDE: write, check and run .jlb programs with the Rust or C interpreter.",
-    "copyright": "ASDFboy and Claude",
+    "copyright": "ASDFboy",
     "windows": {
       "nsis": {
         "installMode": "currentUser"

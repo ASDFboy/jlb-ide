@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "An IDE for the .jlb programming language",
-  "author": "ASDFboy and Claude",
+  "author": "ASDFboy",
   "type": "module",
   "scripts": {
     "build:web": "node scripts/build-web.mjs",

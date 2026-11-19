@@ -2,7 +2,7 @@
 name = "jlb-ide"
 version = "0.1.0"
 description = "An IDE for the .jlb programming language"
-authors = ["ASDFboy", "Claude"]
+authors = ["ASDFboy"]
 repository = "https://github.com/ASDFboy/jlb-ide"
 edition = "2021"
 
